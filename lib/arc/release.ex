@@ -47,6 +47,56 @@ defmodule Arc.Release do
     %{id: app.id, key: app.key, secret: secret, encryption_master_key: master_key}
   end
 
+  @doc """
+  Finds an app by name or creates it, then makes sure it has an encryption master key
+  and a webhook endpoint when asked for. Safe to run on every boot; used by the
+  compose stack to provision the example app. Returns credentials like `create_app/2`.
+  """
+  def ensure_app(attrs, opts \\ []) when is_map(attrs) do
+    Application.ensure_all_started(@app)
+    name = Map.fetch!(attrs, "name")
+
+    app =
+      case Arc.Repo.get_by(Arc.Apps.App, name: name) do
+        nil ->
+          {:ok, app, _secret} = Arc.Apps.create_app(attrs)
+          app
+
+        app ->
+          app
+      end
+
+    app =
+      if Keyword.get(opts, :encryption, false) and is_nil(app.encryption_master_key) do
+        {:ok, app} =
+          Arc.Apps.put_encryption_master_key(app, Arc.Apps.generate_encryption_master_key())
+
+        app
+      else
+        app
+      end
+
+    with %{"url" => url} = webhook <- Keyword.get(opts, :webhook),
+         false <- Enum.any?(Arc.Webhooks.list_endpoints(app.id), &(&1.url == url)) do
+      {:ok, _} = Arc.Webhooks.create_endpoint(app, webhook)
+    end
+
+    %{
+      id: app.id,
+      key: app.key,
+      secret: app.secret,
+      encryption_master_key: app.encryption_master_key && Base.encode64(app.encryption_master_key)
+    }
+  end
+
+  @doc "Runs `ensure_app/2` and writes the credentials as JSON to `path`."
+  def write_app_credentials(path, attrs, opts \\ []) do
+    credentials = ensure_app(attrs, opts)
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, Jason.encode!(credentials))
+    IO.puts("wrote credentials for app #{credentials.id} to #{path}")
+  end
+
   defp repos, do: Application.fetch_env!(@app, :ecto_repos)
 
   defp load_app do

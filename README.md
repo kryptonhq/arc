@@ -41,6 +41,11 @@ Arc container, so the token issuer is the same on both sides. Most browsers reso
 `*.localhost` to `127.0.0.1`; if yours does not, add `127.0.0.1 keycloak.localhost` to
 `/etc/hosts`.
 
+The stack also runs a **Next.js demo** at <http://localhost:3000> that shows every
+channel type, client events, encryption, user sign-in, channel queries, and webhooks.
+Open it in two browsers with different names. See
+[`examples/nextjs-demo`](examples/nextjs-demo/README.md).
+
 A second Keycloak user, **outsider / outsider**, exists to show what a signed-in user
 who is not on the admin allowlist sees (a 403 page).
 

@@ -1,0 +1,17 @@
+{
+  "name": "arc-nextjs-demo",
+  "private": true,
+  "description": "A Next.js app showing Arc's realtime features against a local Arc.",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000"
+  },
+  "dependencies": {
+    "next": "^16.3.5",
+    "pusher": "^5.3.4",
+    "pusher-js": "^8.6.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  }
+}

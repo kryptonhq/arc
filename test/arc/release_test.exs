@@ -39,6 +39,26 @@ defmodule Arc.ReleaseTest do
     assert_raise Mix.Error, fn -> Mix.Tasks.Arc.Apps.Create.run([]) end
   end
 
+  test "ensure_app is idempotent and writes credentials" do
+    opts = [
+      encryption: true,
+      webhook: %{"url" => "http://demo:3000/api/webhooks", "events" => ["channel_occupied"]}
+    ]
+
+    first = Arc.Release.ensure_app(%{"name" => "Demo"}, opts)
+    second = Arc.Release.ensure_app(%{"name" => "Demo"}, opts)
+
+    assert first == second
+    assert byte_size(Base.decode64!(first.encryption_master_key)) == 32
+    assert length(Arc.Webhooks.list_endpoints(first.id)) == 1
+
+    path =
+      Path.join(System.tmp_dir!(), "arc-demo-#{System.unique_integer([:positive])}/creds.json")
+
+    capture_io(fn -> Arc.Release.write_app_credentials(path, %{"name" => "Demo"}) end)
+    assert Jason.decode!(File.read!(path))["key"] == first.key
+  end
+
   test "mix arc.gen.keys prints usable keys" do
     output = capture_io(fn -> Mix.Tasks.Arc.Gen.Keys.run([]) end)
     [_, secret_key_base] = Regex.run(~r/SECRET_KEY_BASE=(\S+)/, output)

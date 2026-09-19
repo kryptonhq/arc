@@ -1,8 +1,9 @@
-# Local stack: Arc + Postgres + Keycloak, pre-configured.
+# Local stack: Arc + Postgres + Keycloak, pre-configured, plus a Next.js demo app.
 #
 #   docker compose up --build
 #
-# Then open http://localhost:4000 and sign in as admin / admin.
+# Then open http://localhost:4000 (dashboard, sign in as admin / admin) and
+# http://localhost:3000 (the demo; open it in two windows).
 #
 # Keycloak is addressed as http://keycloak.localhost:8180 by both the browser and the
 # Arc container (browsers resolve *.localhost to 127.0.0.1; inside the compose network
@@ -51,14 +52,17 @@ services:
       timeout: 5s
       retries: 60
 
-  arc:
+  # One-shot: applies migrations and makes sure the demo app exists (with an
+  # encryption key and a webhook pointing at the demo), then writes its credentials
+  # to a volume the demo reads. Runs before Arc starts, so Arc's cache warms with it.
+  arc-seed:
+    image: arc:local
     build: .
+    user: root
     depends_on:
       postgres:
         condition: service_healthy
-      keycloak:
-        condition: service_healthy
-    environment:
+    environment: &arc-env
       DATABASE_URL: postgres://arc:arc@postgres:5432/arc
       # Development-only keys. Generate real ones with `mix arc.gen.keys`.
       SECRET_KEY_BASE: dev-only-secret-key-base-change-me-dev-only-secret-key-base-change-me-00
@@ -71,6 +75,28 @@ services:
       ARC_OIDC_CLIENT_ID: arc-dashboard
       ARC_OIDC_CLIENT_SECRET: arc-dashboard-dev-secret
       ARC_ADMIN_EMAILS: admin@example.com
+    volumes:
+      - demo-credentials:/shared
+    command:
+      - sh
+      - -c
+      - >-
+        /app/bin/migrate &&
+        /app/bin/arc eval 'Arc.Release.write_app_credentials("/shared/arc-demo.json",
+        %{"name" => "Next.js demo", "client_events_enabled" => true},
+        encryption: true,
+        webhook: %{"url" => "http://demo:3000/api/webhooks",
+        "events" => ["channel_occupied", "channel_vacated", "member_added", "member_removed", "cache_miss"]})'
+
+  arc:
+    image: arc:local
+    build: .
+    depends_on:
+      arc-seed:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
+    environment: *arc-env
     ports:
       - "4000:4000"
     ulimits:
@@ -78,5 +104,24 @@ services:
         soft: 65536
         hard: 65536
 
+  demo:
+    build: examples/nextjs-demo
+    depends_on:
+      arc:
+        condition: service_healthy
+    environment:
+      ARC_CREDENTIALS_FILE: /shared/arc-demo.json
+      # Server-to-server calls go over the compose network...
+      ARC_API_HOST: arc
+      ARC_API_PORT: "4000"
+      # ...while browsers connect to the published port.
+      ARC_WS_HOST: localhost
+      ARC_WS_PORT: "4000"
+    volumes:
+      - demo-credentials:/shared:ro
+    ports:
+      - "3000:3000"
+
 volumes:
   pgdata:
+  demo-credentials:
