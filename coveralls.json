@@ -1,0 +1,13 @@
+{
+  "coverage_options": {
+    "minimum_coverage": 90,
+    "treat_no_relevant_lines_as_covered": true
+  },
+  "skip_files": [
+    "test/support",
+    "lib/arc_web/components/core_components.ex",
+    "lib/arc_web/gettext.ex",
+    "lib/arc_web/telemetry.ex",
+    "lib/arc_web.ex"
+  ]
+}

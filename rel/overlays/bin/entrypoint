@@ -1,0 +1,7 @@
+#!/bin/sh
+# Applies migrations, then starts Arc. A fresh Postgres plus this container is a
+# working install.
+set -eu
+cd -P -- "$(dirname -- "$0")"
+./migrate
+exec ./server

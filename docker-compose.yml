@@ -1,0 +1,82 @@
+# Local stack: Arc + Postgres + Keycloak, pre-configured.
+#
+#   docker compose up --build
+#
+# Then open http://localhost:4000 and sign in as admin / admin.
+#
+# Keycloak is addressed as http://keycloak.localhost:8180 by both the browser and the
+# Arc container (browsers resolve *.localhost to 127.0.0.1; inside the compose network
+# the name is an alias of the Keycloak container), so the token issuer matches on both
+# sides. If your browser does not resolve *.localhost, add
+# "127.0.0.1 keycloak.localhost" to /etc/hosts.
+#
+# Postgres is published on 5442 so `mix test` and `mix phx.server` can use it too.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: arc
+      POSTGRES_PASSWORD: arc
+      POSTGRES_DB: arc
+    ports:
+      - "5442:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arc"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: "8180"
+      KC_HOSTNAME: http://keycloak.localhost:8180
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8180:8180"
+    volumes:
+      - ./docker/keycloak:/opt/keycloak/data/import:ro
+    networks:
+      default:
+        aliases:
+          - keycloak.localhost
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  arc:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://arc:arc@postgres:5432/arc
+      # Development-only keys. Generate real ones with `mix arc.gen.keys`.
+      SECRET_KEY_BASE: dev-only-secret-key-base-change-me-dev-only-secret-key-base-change-me-00
+      ARC_ENCRYPTION_KEY: ZGV2LW9ubHktZW5jcnlwdGlvbi1rZXktMzJieXRlcyE=
+      PHX_HOST: localhost
+      PHX_PUBLIC_PORT: "4000"
+      PHX_PUBLIC_SCHEME: http
+      PORT: "4000"
+      ARC_OIDC_ISSUER: http://keycloak.localhost:8180/realms/arc
+      ARC_OIDC_CLIENT_ID: arc-dashboard
+      ARC_OIDC_CLIENT_SECRET: arc-dashboard-dev-secret
+      ARC_ADMIN_EMAILS: admin@example.com
+    ports:
+      - "4000:4000"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+volumes:
+  pgdata:

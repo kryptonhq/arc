@@ -1,0 +1,17 @@
+## Arc VM flags. See README.md, "Operations".
+
+## Maximum processes and ports. Every client connection is one process and one port,
+## so these must exceed the connection ceiling with room to spare.
++P 5000000
++Q 2000000
+
+## Kernel poll for large numbers of sockets (on by default on modern OTP; explicit here).
++K true
+
+## Do not let idle schedulers spin; in containers that shows up as phantom CPU usage.
++sbwt none
++sbwtdcpu none
++sbwtdio none
+
+## Larger distribution buffer for cross-node fan-out in a cluster.
++zdbbl 131072

@@ -1,0 +1,14 @@
+{
+  "name": "arc-integration-js",
+  "private": true,
+  "type": "module",
+  "description": "Drives the unmodified Channels protocol v7 JavaScript client SDK against a running Arc.",
+  "scripts": {
+    "test": "node --test --test-concurrency=1"
+  },
+  "dependencies": {
+    "pusher-js": "^8.4.0",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1"
+  }
+}

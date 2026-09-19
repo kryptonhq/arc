@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  MIX_ENV: test
+  ELIXIR_VERSION: "1.18.4"
+  OTP_VERSION: "27.3"
+
+jobs:
+  test:
+    name: Unit, property, protocol, failure
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: arc
+          POSTGRES_PASSWORD: arc
+        ports: ["5442:5432"]
+        options: >-
+          --health-cmd "pg_isready -U arc" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('mix.lock') }}
+      - run: mix deps.get
+      - run: mix compile --warnings-as-errors
+      - run: mix format --check-formatted
+      # Fails the build below 90% line coverage (coveralls.json).
+      - run: mix coveralls
+      - name: Critical modules at 100%
+        run: |
+          mix coveralls.json > /dev/null
+          python3 - <<'PY'
+          import json, sys
+          required = ["lib/arc/crypto.ex", "lib/arc/crypto/secret_box.ex", "lib/arc/channels/auth.ex",
+                      "lib/arc/channels/channel.ex", "lib/arc_web/plugs/api_auth.ex", "lib/arc_web/admin_auth.ex",
+                      "lib/arc/realtime/protocol.ex", "lib/arc/realtime/socket.ex", "lib/arc/realtime/error_codes.ex"]
+          files = {f["name"]: f["coverage"] for f in json.load(open("cover/excoveralls.json"))["source_files"]}
+          bad = [n for n in required if any(c == 0 for c in files[n])]
+          if bad:
+              sys.exit("below 100%: " + ", ".join(bad))
+          PY
+
+  cluster:
+    name: Cluster (three nodes)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: arc
+          POSTGRES_PASSWORD: arc
+        ports: ["5442:5432"]
+        options: >-
+          --health-cmd "pg_isready -U arc" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+      - run: mix deps.get
+      - run: mix test --only cluster
+
+  integration:
+    name: Real SDKs (JavaScript client, Python server)
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: dev
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: arc
+          POSTGRES_PASSWORD: arc
+        ports: ["5442:5432"]
+        options: >-
+          --health-cmd "pg_isready -U arc" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: mix deps.get
+      - run: test/integration/run.sh
+
+  docker:
+    name: Compose stack and load-test smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up -d --build --wait
+      - name: Create a load-test app on the running node
+        run: |
+          creds=$(docker compose exec -T arc bin/arc rpc 'IO.puts(Jason.encode!(Arc.Release.create_app(%{"name" => "ci", "client_events_enabled" => true, "enable_presence_limits" => false})))' | tail -n 1)
+          echo "ARC_APP_ID=$(echo "$creds" | jq -r .id)" >> "$GITHUB_ENV"
+          echo "ARC_APP_KEY=$(echo "$creds" | jq -r .key)" >> "$GITHUB_ENV"
+          echo "ARC_APP_SECRET=$(echo "$creds" | jq -r .secret)" >> "$GITHUB_ENV"
+      - uses: grafana/setup-k6-action@v1
+      - run: loadtest/smoke.sh
+      - if: failure()
+        run: docker compose logs arc

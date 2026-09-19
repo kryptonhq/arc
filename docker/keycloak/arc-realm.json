@@ -1,0 +1,49 @@
+{
+  "realm": "arc",
+  "enabled": true,
+  "displayName": "Arc (local development)",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "clients": [
+    {
+      "clientId": "arc-dashboard",
+      "name": "Arc dashboard",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "arc-dashboard-dev-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:4000/auth/callback"],
+      "webOrigins": ["http://localhost:4000"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:4000/*"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "email": "admin@example.com",
+      "emailVerified": true,
+      "firstName": "Arc",
+      "lastName": "Admin",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "admin", "temporary": false }]
+    },
+    {
+      "username": "outsider",
+      "email": "outsider@example.com",
+      "emailVerified": true,
+      "firstName": "Not",
+      "lastName": "Allowed",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "outsider", "temporary": false }]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+_build
+deps
+.git
+test/integration/js/node_modules
+test/integration/python/.venv
+loadtest
+priv/static/assets
+*.md
+!README.md
