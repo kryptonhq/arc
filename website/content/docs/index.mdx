@@ -46,6 +46,16 @@ against Arc by changing the host and credentials only. Arc's own SDKs will follo
 - **Arc** holds the connections, fans events out, tracks presence, and reports what it is
   doing through Prometheus metrics and the dashboard.
 
+<Mermaid
+  chart={`flowchart LR
+    B["Your backend"] -- "signed HTTP API" --> A(("Arc"))
+    A -- "webhooks" --> B
+    A -- "events" --> C1["Browser"]
+    A -- "events" --> C2["Mobile app"]
+    C1 -- "authorise channel" --> B
+    C1 -- "client events" --> A`}
+/>
+
 An **app** is the unit of isolation: one set of credentials, its own channels, its own
 limits. Most installations have one per product.
 

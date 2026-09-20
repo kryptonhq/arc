@@ -19,11 +19,23 @@ npm run build   # what CI and Vercel run
 | `lib/layout.shared.tsx` | Navigation bar: wordmark and top-level links |
 | `app/(home)/page.tsx` | The landing page |
 | `app/global.css` | Arc's palette and typefaces, matching the dashboard |
-| `components/mdx.tsx` | Components usable in MDX (`Callout`, `Cards`, `Steps`, `Tabs`) |
+| `components/mdx.tsx` | Components usable in MDX (`Callout`, `Cards`, `Steps`, `Tabs`, `Mermaid`) |
+| `components/mermaid.tsx` | Diagram rendering, themed to match the rest of the site |
 
 Adding a page means adding an `.mdx` file with `title` and `description` frontmatter,
 then listing it in the folder's `meta.json`. Search, `llms.txt` and OG images pick it up
 automatically.
+
+Diagrams use Mermaid, as a component rather than a fenced code block, because Fumadocs
+does not render ```` ```mermaid ```` blocks on its own:
+
+```mdx
+<Mermaid
+  chart={`sequenceDiagram
+    Client->>Arc: connect
+    Arc-->>Client: socket_id`}
+/>
+```
 
 Write links between pages as relative paths (`/docs/protocol/channels`), and plain URLs
 as Markdown links: MDX reads `<https://example.com>` as JSX and the build fails.

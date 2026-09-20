@@ -7,15 +7,20 @@ Clients cannot join a private, presence or encrypted channel on their own. They 
 backend, which decides whether that person may join and signs a token with the app secret.
 Arc verifies the signature; it never sees your session or your user table.
 
-```mermaid
-sequenceDiagram
-    Client->>Arc: connect, receive socket_id
-    Client->>Your backend: POST /realtime/auth (socket_id, channel_name)
-    Your backend->>Your backend: is this user allowed in this channel?
-    Your backend-->>Client: { auth: "key:signature", channel_data }
-    Client->>Arc: pusher:subscribe with auth
-    Arc-->>Client: subscription_succeeded
-```
+<Mermaid
+  chart={`sequenceDiagram
+    participant C as Client
+    participant B as Your backend
+    participant A as Arc
+    C->>A: connect
+    A-->>C: socket_id
+    C->>B: POST /realtime/auth (socket_id, channel_name)
+    B->>B: may this user join this channel?
+    B-->>C: auth signature (+ channel_data)
+    C->>A: pusher:subscribe with auth
+    A->>A: verify signature with the app secret
+    A-->>C: subscription_succeeded`}
+/>
 
 Your SDK produces the token, so the endpoint is a few lines:
 
