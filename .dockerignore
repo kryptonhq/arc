@@ -8,3 +8,4 @@ priv/static/assets
 *.md
 !README.md
 examples
+website
