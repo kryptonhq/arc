@@ -117,11 +117,23 @@ defmodule Arc.ChannelsTest do
 
         <<prefix::binary-size(^position), original, rest::binary>> = signature
 
-        if byte != original do
+        # Signatures are hex compared without regard to case, so swapping a digit for
+        # the same digit in the other case is not a mutation.
+        if downcase_byte(byte) != downcase_byte(original) do
           mutated = "278d425bdf160c739803:" <> prefix <> <<byte>> <> rest
           assert {:error, _} = Auth.verify_channel(@config, socket_id, channel, mutated)
         end
       end
     end
+
+    test "an uppercase signature verifies, because SDKs differ on case" do
+      "278d425bdf160c739803:" <> signature = Auth.sign_channel(@config, "1.2", "private-a")
+      upper = "278d425bdf160c739803:" <> String.upcase(signature)
+
+      assert :ok = Auth.verify_channel(@config, "1.2", "private-a", upper)
+    end
   end
+
+  defp downcase_byte(byte) when byte in ?A..?Z, do: byte + 32
+  defp downcase_byte(byte), do: byte
 end
