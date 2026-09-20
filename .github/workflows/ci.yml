@@ -48,10 +48,18 @@ jobs:
           required = ["lib/arc/crypto.ex", "lib/arc/crypto/secret_box.ex", "lib/arc/channels/auth.ex",
                       "lib/arc/channels/channel.ex", "lib/arc_web/plugs/api_auth.ex", "lib/arc_web/admin_auth.ex",
                       "lib/arc/realtime/protocol.ex", "lib/arc/realtime/socket.ex", "lib/arc/realtime/error_codes.ex"]
-          files = {f["name"]: f["coverage"] for f in json.load(open("cover/excoveralls.json"))["source_files"]}
-          bad = [n for n in required if any(c == 0 for c in files[n])]
+          report = {f["name"]: f for f in json.load(open("cover/excoveralls.json"))["source_files"]}
+          bad = False
+          for name in required:
+              source = report[name]["source"].split("\n")
+              missed = [i + 1 for i, c in enumerate(report[name]["coverage"]) if c == 0]
+              if missed:
+                  bad = True
+                  print(f"{name} is not fully covered:")
+                  for line in missed:
+                      print(f"  {name}:{line}: {source[line - 1].strip()}")
           if bad:
-              sys.exit("below 100%: " + ", ".join(bad))
+              sys.exit("the modules above must stay at 100% line coverage")
           PY
 
   cluster:
