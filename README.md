@@ -382,6 +382,27 @@ test/integration/run.sh           # real client (JavaScript) and server (Python)
 Load tests live in [`loadtest/`](loadtest/README.md), and the documentation site in
 [`website/`](website/README.md).
 
+## Security and licence scanning
+
+Every push and pull request, and once a night, CI checks dependencies against public
+advisories — `mix deps.audit` and `mix hex.audit` for Hex, `npm audit` for the
+documentation site and the demo. These need no accounts, and they are how the mint
+advisory that prompted this section was found.
+
+Two hosted scanners run when their token is present as a repository secret, and skip
+themselves when it is not:
+
+| Secret | Tool | What it adds |
+| --- | --- | --- |
+| `SNYK_TOKEN` | [Snyk](https://snyk.io) | Vulnerabilities across Hex and npm, with a recorded snapshot of `main` so new advisories raise an alert. Snyk reaches Elixir through its CLI only, which is how the workflow runs it |
+| `FOSSA_API_KEY` | [FOSSA](https://fossa.com) | Licence obligations and attribution across every ecosystem in the repository, including Hex. Useful for keeping [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) honest as dependencies change |
+
+Both have free tiers for open-source projects. Add the secret in **Settings → Secrets
+and variables → Actions**, and the matching job starts working on the next run.
+
+Pull requests also go through GitHub's dependency review, which fails on a dependency
+whose licence Arc cannot take on under Apache-2.0.
+
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
