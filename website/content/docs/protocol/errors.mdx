@@ -1,0 +1,60 @@
+---
+title: Errors and close codes
+description: What Arc sends when something is wrong, and what clients do about it.
+---
+
+Errors arrive as a `pusher:error` frame. Codes are grouped into bands, and SDKs act on the
+band rather than the exact number.
+
+| Band | What the client does |
+| --- | --- |
+| 4000–4099 | Do not reconnect |
+| 4100–4199 | Reconnect after a backoff |
+| 4200–4299 | Reconnect immediately |
+| 4300–4399 | Close, do not retry |
+
+## Codes Arc sends
+
+| Code | Closes | When |
+| --- | --- | --- |
+| `4001` | Yes | Unknown app key, or the app was deleted |
+| `4003` | Yes | App disabled |
+| `4004` | Yes | App is over its connection limit |
+| `4007` | Yes | Protocol version other than 7 |
+| `4008` | Yes | No protocol version supplied |
+| `4009` | Yes | User sign-in failed |
+| `4100` | Yes | Node over capacity, or still starting up |
+| `4101` | Yes | Node shutting down |
+| `4102` | Yes | The client is not reading fast enough |
+| `4201` | Yes | No pong after a server ping |
+| `4300` | Yes | Connections terminated by your backend |
+| `4301` | No | Client event over the rate limit |
+| `null` | No | Malformed frame, unknown event, rejected client event |
+
+A code of `null` means the frame was wrong but the connection is fine: the SDK surfaces it
+to your error handler and carries on.
+
+## Subscription errors
+
+Failing to join a channel is reported on the channel, not the connection:
+
+```json
+{
+  "event": "pusher:subscription_error",
+  "channel": "private-orders",
+  "data": "{\"type\":\"AuthError\",\"error\":\"Invalid signature: ...\",\"status\":401}"
+}
+```
+
+| Status | Meaning |
+| --- | --- |
+| `401` | The signature did not verify, or was missing or malformed |
+| `403` | The app forbids it: a full presence channel, or a user channel that is not yours |
+| `400` | Invalid channel name, or `channel_data` without a `user_id` |
+
+## Slow clients
+
+Arc watches how far behind each connection is. If a client stops reading and its queue
+passes 5,000 messages, Arc closes it with `4102` rather than letting one slow consumer
+grow until it takes the node's memory with it. The SDK reconnects after a backoff and
+starts clean.

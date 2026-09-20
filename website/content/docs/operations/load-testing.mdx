@@ -1,0 +1,43 @@
+---
+title: Load testing
+description: The k6 suite in the repository, and the numbers each scenario has to meet.
+---
+
+The repository ships k6 scripts that drive Arc over its public interfaces, so the
+generator's own performance stays independent of what is being measured.
+
+```bash
+export ARC_WS_URL=ws://arc.example.com:4000 ARC_API_URL=http://arc.example.com:4000
+export ARC_APP_ID=... ARC_APP_KEY=... ARC_APP_SECRET=...
+k6 run loadtest/fanout_wide.js
+```
+
+| Script | Shape | Bar on 4 vCPU / 8 GB |
+| --- | --- | --- |
+| `connect_ramp.js` | Ramp to 100k idle connections, hold 10 min | Memory stable, p99 handshake < 500 ms |
+| `fanout_wide.js` | 50k connections on one channel, 10 events/s | p99 receive < 200 ms |
+| `fanout_many.js` | 50k connections across 10k channels, 100 events/s | p99 receive < 200 ms |
+| `presence_churn.js` | 10k members, 500 joins and leaves per second | Member lists exact at the end |
+| `client_events.js` | 10k clients, 1 client event/s each | Well-behaved clients never limited |
+| `api_throughput.js` | 5k publishes/s | p99 < 50 ms, zero 5xx |
+| `reconnect_storm.js` | 50k connections drop at once | Everyone back within 60 s |
+| `soak.js` | 20k connections, 12 hours | Flat memory |
+
+`loadtest/smoke.sh` runs all of them at small scale, which checks the scripts and the
+server end to end but proves nothing about the bars.
+
+## Generating real load
+
+One client address can open roughly 28k–64k connections to one server address and port.
+For the larger scenarios, run k6 from several machines or give the generator several
+source addresses (`k6 run --local-ips=10.0.0.10-10.0.0.13 ...`), and raise `ulimit -n` on
+the generator too.
+
+## Reading a run
+
+Watch `arc_connections_active`, run queue length, binary memory and scheduler
+utilisation while the run is in progress. A run that meets its latency bar while the run
+queue climbs is a run that would have failed with a longer duration.
+
+Record each full-scale run in `loadtest/README.md` with the hardware it ran on, so a
+regression is visible rather than a matter of opinion.

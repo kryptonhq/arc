@@ -1,0 +1,52 @@
+---
+title: Dashboard
+description: What operators can see and change, and who is allowed in.
+---
+
+The dashboard is served by Arc itself at `/admin`, behind your identity provider.
+
+## Who gets in
+
+Sign-in is OpenID Connect with PKCE. There is one role: an administrator is an identity
+whose provider says the email is verified and whose address appears in
+`ARC_ADMIN_EMAILS`. The allowlist is re-checked on every request, so removing someone
+revokes their access at once, and sessions last 12 hours.
+
+Arc keeps only the subject and email in the session — no tokens, because it calls nothing
+on the administrator's behalf. Someone who signs in but is not on the list gets a page
+that says so, rather than a blank screen.
+
+## What it shows
+
+**Overview** leads with the live connection count and a stream of the last two minutes,
+sampled once a second, then the nodes, per-app counts, and recent changes from the audit
+log.
+
+**Apps** lists every app with its live connections and subscriptions. Opening one shows:
+
+- Credentials: app id, key, host and port, each with a copy button
+- The channels currently occupied, with subscriber counts and a filter
+- Recent webhook deliveries
+- Limits and toggles: client events, connection limit, presence ceiling, payload size,
+  `subscription_count` queries
+- Secret rotation and the encryption master key
+
+**Webhooks** manages endpoints per app: the URL, which events it wants, an optional
+endpoint secret, and every delivery attempt with its failure reason.
+
+**Audit log** records who created, changed or deleted apps and webhooks, and every secret
+rotation.
+
+## Secrets are shown once
+
+A newly created or rotated secret appears on exactly one screen, with the copyable Django
+and JavaScript snippets. It is not stored anywhere it could be read back, and not put in
+a flash message. If it is lost, rotate it — rotation takes effect on every node
+immediately, so update your backends in the same deploy.
+
+## It cannot slow the data plane
+
+The live numbers come from a metrics aggregator that publishes a snapshot once a second.
+The dashboard subscribes to that; it never queries the connection registry. Channel lists
+are the one on-demand read, and they happen when you open the page or press Refresh —
+never on a timer.

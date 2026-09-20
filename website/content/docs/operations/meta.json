@@ -1,0 +1,5 @@
+{
+  "title": "Running it",
+  "icon": "ServerCog",
+  "pages": ["deploying", "dashboard", "clustering", "observability", "load-testing"]
+}

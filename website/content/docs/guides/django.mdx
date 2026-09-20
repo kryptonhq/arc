@@ -1,0 +1,112 @@
+---
+title: Django backend
+description: Publishing events and authorising channels from Django with the Python server SDK.
+---
+
+The Python server SDK for this protocol works against Arc unmodified: only `host`, `port`
+and `ssl` change.
+
+```bash
+pip install pusher
+```
+
+```python
+# settings.py
+ARC = {
+    "app_id": "1",
+    "key": "<app key>",
+    "secret": "<app secret>",
+    "host": "arc.example.com",
+    "port": 443,
+    "ssl": True,
+    # Only if you use encrypted channels:
+    # "encryption_master_key_base64": "<master key>",
+}
+```
+
+```python
+# realtime.py
+import pusher
+from django.conf import settings
+
+arc = pusher.Pusher(**settings.ARC)
+```
+
+## Publishing
+
+```python
+def create_order(request):
+    order = Order.objects.create(...)
+
+    arc.trigger(
+        "orders",
+        "created",
+        {"id": order.id, "total": str(order.total)},
+        request.POST.get("socket_id"),   # don't echo to the tab that did it
+    )
+    return JsonResponse({"id": order.id})
+```
+
+Pass the browser's `socket_id` through whenever a request came from a client that has
+already updated its own view. Up to 100 channels per publish, and up to 10 events in a
+`trigger_batch`.
+
+## Authorising channels
+
+```python
+def realtime_auth(request):
+    channel, socket_id = request.POST["channel_name"], request.POST["socket_id"]
+
+    if not can_join(request.user, channel):
+        return HttpResponseForbidden()
+
+    data = None
+    if channel.startswith("presence-"):
+        data = {"user_id": str(request.user.id), "user_info": {"name": request.user.get_full_name()}}
+
+    return JsonResponse(arc.authenticate(channel=channel, socket_id=socket_id, custom_data=data))
+```
+
+## Sending to one user
+
+```python
+def sign_in_realtime(request):
+    return JsonResponse(arc.authenticate_user(
+        socket_id=request.POST["socket_id"],
+        user_data={"id": str(request.user.id), "name": request.user.get_full_name()},
+    ))
+
+arc.send_to_user(str(user.id), "notification", {"text": "Your export is ready"})
+arc.terminate_user_connections(str(user.id))   # after a ban or a password change
+```
+
+## Receiving webhooks
+
+```python
+@csrf_exempt
+def realtime_webhook(request):
+    webhook = arc.validate_webhook(
+        key=request.headers.get("X-Pusher-Key"),
+        signature=request.headers.get("X-Pusher-Signature"),
+        body=request.body,          # raw bytes, before parsing
+    )
+    if webhook is None:
+        return HttpResponseForbidden()
+
+    for event in webhook["events"]:
+        if event["name"] == "channel_vacated":
+            Room.objects.filter(channel=event["channel"]).update(active=False)
+
+    return HttpResponse(status=200)
+```
+
+Answer quickly and do the work afterwards: Arc times out a delivery at 10 seconds and
+retries `5xx`, so a slow handler turns into duplicate work.
+
+## Reading state
+
+```python
+arc.channels_info(prefix_filter="presence-", attributes=["user_count"])
+arc.channel_info("presence-room-1", attributes=["user_count"])
+arc.users_info("presence-room-1")
+```

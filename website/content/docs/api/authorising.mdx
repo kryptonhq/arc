@@ -1,0 +1,53 @@
+---
+title: Authorising channels
+description: The endpoint your backend exposes so clients can join private and presence channels.
+---
+
+Clients cannot join a private, presence or encrypted channel on their own. They ask your
+backend, which decides whether that person may join and signs a token with the app secret.
+Arc verifies the signature; it never sees your session or your user table.
+
+```mermaid
+sequenceDiagram
+    Client->>Arc: connect, receive socket_id
+    Client->>Your backend: POST /realtime/auth (socket_id, channel_name)
+    Your backend->>Your backend: is this user allowed in this channel?
+    Your backend-->>Client: { auth: "key:signature", channel_data }
+    Client->>Arc: pusher:subscribe with auth
+    Arc-->>Client: subscription_succeeded
+```
+
+Your SDK produces the token, so the endpoint is a few lines:
+
+```python
+# Django
+def realtime_auth(request):
+    channel = request.POST["channel_name"]
+    socket_id = request.POST["socket_id"]
+
+    if not can_join(request.user, channel):
+        return HttpResponseForbidden()
+
+    data = None
+    if channel.startswith("presence-"):
+        data = {"user_id": str(request.user.id), "user_info": {"name": request.user.get_full_name()}}
+
+    return JsonResponse(arc.authenticate(channel=channel, socket_id=socket_id, custom_data=data))
+```
+
+What gets signed:
+
+| Channel type | String |
+| --- | --- |
+| Private and encrypted | `<socket_id>:<channel>` |
+| Presence | `<socket_id>:<channel>:<channel_data>` |
+| User sign-in | `<socket_id>::user::<user_data>` |
+
+For encrypted channels the SDK also returns a `shared_secret`, derived from the app's
+encryption master key, which the client uses to decrypt.
+
+<Callout title="Rotating a secret">
+  Rotation takes effect on every node immediately. Update your backend's configuration in
+  the same deploy, or authorisation requests signed with the old secret will start coming
+  back as `401`.
+</Callout>

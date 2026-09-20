@@ -1,0 +1,88 @@
+---
+title: HTTP API
+description: Publishing events and querying channels from your backend, with signed requests.
+---
+
+Your backend talks to Arc over a small signed HTTP API. It is the same scheme the server
+SDKs for this protocol already implement, so a Python, Node, Go or Ruby SDK works by
+pointing `host`, `port` and `ssl` at Arc.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/apps/:app_id/events` | Publish one event to up to 100 channels |
+| `POST` | `/apps/:app_id/batch_events` | Publish up to 10 events |
+| `GET` | `/apps/:app_id/channels` | Occupied channels |
+| `GET` | `/apps/:app_id/channels/:name` | One channel's occupancy and counts |
+| `GET` | `/apps/:app_id/channels/:name/users` | Presence member ids |
+| `POST` | `/apps/:app_id/users/:user_id/terminate_connections` | Close every connection of a user |
+
+## Signing a request
+
+Every request carries these query parameters:
+
+| Parameter | Value |
+| --- | --- |
+| `auth_key` | The app key |
+| `auth_timestamp` | Unix seconds, within 600 seconds of Arc's clock |
+| `auth_version` | `1.0` |
+| `body_md5` | Hex MD5 of the request body, when there is one |
+| `auth_signature` | Hex HMAC-SHA256 of the string below, keyed by the app secret |
+
+The string to sign is three lines: the uppercase method, the path, and the query
+parameters except `auth_signature`, sorted by name and joined with `&`:
+
+```
+POST
+/apps/1/events
+auth_key=abc&auth_timestamp=1700000000&auth_version=1.0&body_md5=...
+```
+
+Comparisons are constant time. A stale timestamp or a body whose MD5 does not match is
+a `401`.
+
+## Publishing
+
+```json
+POST /apps/1/events
+{
+  "name": "order-created",
+  "channels": ["orders", "private-account-42"],
+  "data": "{\"id\":7}",
+  "socket_id": "1234.5678",
+  "info": "subscription_count"
+}
+```
+
+- `data` is a **string**. Your SDK serialises the object for you.
+- `socket_id` excludes the connection that caused the action, so the browser that made
+  the change does not receive an echo of it. Every SDK sends it when you pass it through.
+- `info` asks for per-channel counts in the response, which costs a lookup, so it is only
+  computed when requested.
+
+Publishing to a channel nobody is listening to succeeds and returns `{}`. That is not an
+error: subscribers come and go.
+
+## Querying
+
+```
+GET /apps/1/channels?filter_by_prefix=presence-&info=user_count
+GET /apps/1/channels/presence-room-1?info=user_count,subscription_count
+GET /apps/1/channels/presence-room-1/users
+```
+
+`user_count` is only meaningful on presence channels; asking for it elsewhere is a `400`
+rather than a silent zero. `subscription_count` has to ask every node, so it must be
+enabled per app and is a `403` when it is not.
+
+## Errors
+
+Bodies are plain text, written for the developer reading them:
+
+| Status | Meaning |
+| --- | --- |
+| `400` | Malformed request |
+| `401` | Bad signature, stale timestamp, or `body_md5` mismatch |
+| `403` | App disabled, or a feature not enabled for this app |
+| `404` | Unknown app |
+| `413` | Payload above the app's limit |
+| `429` | Rate limited |

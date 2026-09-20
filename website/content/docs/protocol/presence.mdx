@@ -1,0 +1,49 @@
+---
+title: Presence
+description: Who is in a channel, counted by user rather than by connection.
+---
+
+Subscribing to a `presence-` channel sends `channel_data` containing a `user_id` and
+optional `user_info`. The subscriber receives the current membership:
+
+```json
+{
+  "event": "pusher_internal:subscription_succeeded",
+  "channel": "presence-room-1",
+  "data": "{\"presence\":{\"ids\":[\"42\"],\"hash\":{\"42\":{\"name\":\"Ada\"}},\"count\":1}}"
+}
+```
+
+Everyone else in the channel gets `pusher_internal:member_added`, and
+`pusher_internal:member_removed` when someone leaves.
+
+## Members are users, not connections
+
+One person with two tabs is one member. A second connection for a user id that is already
+present produces no `member_added`, and `member_removed` fires only when that user's last
+connection goes away. Getting this wrong is how member lists drift, so Arc counts
+references per user id and the webhooks follow the same rule.
+
+## Across nodes
+
+Membership is replicated between nodes as a CRDT, so it converges after a network
+partition without any node coordinating the others. A node that dies has its members
+removed from everyone else's view within about five seconds.
+
+## Limits
+
+An app caps presence channels at 100 members by default. Joining a full channel returns a
+subscription error with status `403` rather than a truncated member list — the client
+learns it is not in the room instead of believing it is. You can raise the ceiling or
+switch it off per app in the dashboard.
+
+`channel_data` over 10 KB is rejected.
+
+## Reading membership from your backend
+
+```
+GET /apps/:app_id/channels/presence-room-1/users
+GET /apps/:app_id/channels/presence-room-1?info=user_count
+```
+
+Both are part of the [HTTP API](/docs/api/http).

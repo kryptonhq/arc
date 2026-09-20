@@ -1,0 +1,80 @@
+---
+title: Getting started
+description: Bring up Arc, create an app, and see events flowing, in a few minutes.
+icon: Rocket
+---
+
+## Run the stack
+
+Clone the repository and start everything:
+
+```bash
+git clone https://github.com/kryptonhq/arc.git
+cd arc
+docker compose up --build
+```
+
+That gives you four things:
+
+| Service | Where | What it is |
+| --- | --- | --- |
+| Arc | [http://localhost:4000](http://localhost:4000) | The server and its dashboard |
+| Postgres | `localhost:5442` | App records, webhook config, audit log |
+| Keycloak | [http://keycloak.localhost:8180](http://keycloak.localhost:8180) | An identity provider for dashboard sign-in, pre-configured |
+| Demo app | [http://localhost:3000](http://localhost:3000) | A Next.js app exercising every feature |
+
+Migrations run when Arc starts, so a fresh database plus the image is a working install.
+
+<Callout title="Keycloak on localhost">
+  Keycloak is addressed as `keycloak.localhost` by both your browser and the Arc
+  container so the token issuer matches on both sides. Most browsers resolve
+  `*.localhost` to `127.0.0.1`; if yours does not, add `127.0.0.1 keycloak.localhost`
+  to `/etc/hosts`.
+</Callout>
+
+## Create an app
+
+Open [http://localhost:4000](http://localhost:4000), sign in as **admin / admin**, and create an app. The page
+that follows shows the app id, key and secret, with ready-made snippets for a browser
+client and a Django `settings.py`.
+
+The secret is shown once. If it is lost, rotate it from the app's page and update your
+backends with the new one.
+
+You can do the same from a shell on a running node:
+
+```bash
+docker compose exec arc bin/arc rpc 'IO.puts(Jason.encode!(Arc.Release.create_app("Chat")))'
+```
+
+## See it working
+
+The demo at [http://localhost:3000](http://localhost:3000) is already wired to Arc. Open it in two browsers with
+different names to watch chat messages, presence, typing indicators, cache-channel replay,
+encrypted notes and webhooks as they happen. Its source is in
+[`examples/nextjs-demo`](https://github.com/kryptonhq/arc/tree/main/examples/nextjs-demo).
+
+## Use your own credentials
+
+<Steps>
+<Step>
+### Connect a client
+
+Point the JavaScript client SDK at your host and app key, and authorise private channels
+through your backend. See [the browser guide](/docs/guides/javascript).
+</Step>
+
+<Step>
+### Publish from your backend
+
+Use the Python server SDK from Django, or any SDK for this protocol, with `host`, `port`
+and `ssl` pointing at Arc. See [the Django guide](/docs/guides/django).
+</Step>
+
+<Step>
+### Watch it
+
+The dashboard shows live connection counts per app, the channels that are occupied, and
+recent webhook deliveries. `/metrics` exposes the same numbers for Prometheus.
+</Step>
+</Steps>

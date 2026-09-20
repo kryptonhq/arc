@@ -1,0 +1,31 @@
+---
+title: Client events
+description: Letting clients publish to each other, without a round trip through your backend.
+---
+
+A client event is published by a browser rather than by your backend. Typing indicators
+and cursor positions are the usual reason: they are frequent, short-lived, and not worth
+a request to your servers.
+
+```js
+channel.trigger('client-typing', { name: 'Ada' });
+```
+
+Rules Arc enforces:
+
+- The event name must start with `client-`.
+- The app must have client events enabled. They are off by default, because they let one
+  client send data to others without your code seeing it.
+- Only on `private-` and `presence-` channels (including their `cache-` variants). On a
+  public channel it is refused: anyone could join and broadcast.
+- The connection must already be subscribed to that channel.
+- At most 10 per second per connection, and 10 KB each.
+
+The sender never receives its own event back. On presence channels Arc adds the sender's
+`user_id` to the frame, so receivers know who did it without trusting the payload.
+
+Over the limit, the client gets a `pusher:error` with code `4301` and the connection
+stays open. Nothing is dropped silently.
+
+If you need to see these events server-side, subscribe to the
+[`client_event` webhook](/docs/api/webhooks).

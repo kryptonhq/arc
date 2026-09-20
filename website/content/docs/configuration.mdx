@@ -1,0 +1,88 @@
+---
+title: Configuration
+description: Every environment variable Arc reads, and what happens if one is missing.
+icon: Settings
+---
+
+Arc is configured entirely by environment variables. If a required one is missing it
+refuses to boot and names the variable, rather than failing later on a `nil`.
+
+## Required
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | `postgres://user:pass@host:5432/arc` |
+| `SECRET_KEY_BASE` | Signs dashboard sessions and cookies (64 bytes) |
+| `ARC_ENCRYPTION_KEY` | 32 bytes, base64. Encrypts secrets at rest |
+| `PHX_HOST` | Public hostname, used in generated URLs and credential snippets |
+| `ARC_OIDC_ISSUER` | e.g. `https://keycloak.example.com/realms/arc` |
+| `ARC_OIDC_CLIENT_ID` | Confidential client registered with your provider |
+| `ARC_OIDC_CLIENT_SECRET` | That client's secret |
+| `ARC_ADMIN_EMAILS` | Comma-separated allowlist of dashboard administrators |
+
+<Callout type="warn" title="Keep ARC_ENCRYPTION_KEY safe and backed up">
+  It encrypts every app secret, encryption master key and webhook secret in the
+  database. If it is lost, those secrets cannot be recovered and every app must be
+  issued new credentials.
+</Callout>
+
+Generate the two keys with:
+
+```bash
+mix arc.gen.keys
+```
+
+## Optional
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `4000` | Listen port |
+| `PHX_PUBLIC_PORT` | `443` | Port shown in snippets and generated URLs |
+| `PHX_PUBLIC_SCHEME` | `https` | Scheme for the same |
+| `POOL_SIZE` | `10` | Postgres connection pool |
+| `ARC_MAX_CONNECTIONS_PER_NODE` | unlimited | Safety ceiling per node |
+| `ARC_METRICS_AUTH_TOKEN` | — | If set, `/metrics` requires this bearer token |
+| `ARC_CLUSTER_STRATEGY` | `none` | `none`, `gossip`, or `dns` |
+| `ARC_CLUSTER_DNS_QUERY` | — | Headless service name, required for `dns` |
+| `RELEASE_COOKIE` | — | Shared Erlang distribution cookie, required when clustered |
+
+## Per-app settings
+
+These live in the database and are edited in the dashboard, because they differ between
+apps rather than between deployments:
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Client events | off | Whether clients may publish to each other on private and presence channels |
+| Connection limit | unlimited | Connections past it are refused with a do-not-reconnect code |
+| Presence member ceiling | 100 per channel | Joining a full channel returns a subscription error rather than a truncated list |
+| Largest event payload | 10 KB | Publishes above it are refused with `413` |
+| `subscription_count` queries | off | Counting subscribers asks every node, so it is opt-in |
+| Encryption master key | none | Required before encrypted channels accept events |
+
+## Identity provider
+
+The dashboard signs in through OpenID Connect with PKCE. Arc validates the ID token
+signature against the provider's JWKS and checks `iss`, `aud`, `exp` and `nonce` before
+trusting any claim. An administrator needs a verified email that appears in
+`ARC_ADMIN_EMAILS`; the allowlist is re-checked on every request, so removing an address
+revokes access at once. Sessions last 12 hours.
+
+Only the subject and email are kept in the session. Arc stores no tokens, because it
+calls nothing on the administrator's behalf.
+
+If the provider is unreachable, only sign-in is affected: connections and the HTTP API
+keep working, and Arc retries the provider in the background.
+
+### Keycloak
+
+1. Create a realm.
+2. Create a client with **Client authentication** on, the redirect URI
+   `https://<your Arc host>/auth/callback`, and `https://<your Arc host>/*` as a valid
+   post-logout redirect URI.
+3. Enable **Standard flow**, disable **Direct access grants**, and set PKCE to `S256`.
+4. Copy the client secret into `ARC_OIDC_CLIENT_SECRET`.
+
+The realm used by `docker compose` is in
+[`docker/keycloak`](https://github.com/kryptonhq/arc/tree/main/docker/keycloak) and is a
+working example of those settings.

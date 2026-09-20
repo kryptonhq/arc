@@ -1,0 +1,62 @@
+---
+title: Connecting
+description: The handshake, keeping a connection alive, and signing in as a user.
+---
+
+A client connects over WebSocket to:
+
+```
+GET /app/<app key>?protocol=7&client=<name>&version=<version>
+```
+
+Only protocol 7 is accepted. Anything else is refused with code `4007`, and a missing
+version with `4008`.
+
+## The handshake
+
+Arc replies immediately with `pusher:connection_established`, whose `data` carries the
+connection's `socket_id` and the `activity_timeout` in seconds:
+
+```json
+{
+  "event": "pusher:connection_established",
+  "data": "{\"socket_id\":\"1234.5678\",\"activity_timeout\":120}"
+}
+```
+
+`data` is a **string**, not a nested object, for every event. Client SDKs parse it as
+one, and double-encoding it is the most common way for a server to break them.
+
+The `socket_id` matters beyond identifying the connection: your backend passes it when
+publishing so the client that caused an action does not receive an echo of it, and it is
+part of every authorisation signature.
+
+## Staying alive
+
+- The client may send `pusher:ping` at any time; Arc replies `pusher:pong`.
+- When a connection has been idle for `activity_timeout`, Arc sends `pusher:ping`. If
+  nothing arrives within 30 seconds the connection is closed with `4201`.
+- Any frame from the client counts as activity.
+
+## Signing in as a user
+
+`pusher:signin` associates a connection with one of your users, which is what makes
+per-user events and remote disconnects possible. The client sends a signature obtained
+from your backend:
+
+```json
+{
+  "event": "pusher:signin",
+  "data": {
+    "auth": "<app key>:<hex HMAC-SHA256 of socket_id::user::user_data>",
+    "user_data": "{\"id\":\"user-42\"}"
+  }
+}
+```
+
+`user_data` must contain an `id`. On success Arc replies `pusher:signin_success`, and the
+SDK subscribes to that user's own channel, `#server-to-user-user-42`. Your backend can
+then send to the user wherever they are connected, or close every connection they hold.
+
+A failed sign-in closes the connection with `4009`. Signing in again on the same
+connection replaces the association.

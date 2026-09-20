@@ -1,0 +1,58 @@
+---
+title: What Arc is
+description: A self-hosted realtime messaging server, compatible with existing Channels protocol v7 SDKs.
+icon: Signal
+---
+
+Arc keeps WebSocket connections open, groups them into channels, tracks who is present,
+and gives your backend a signed HTTP API for publishing events to them.
+
+It speaks the **Channels protocol, version 7**. Existing client SDKs for that protocol —
+JavaScript, iOS, Android, Flutter — and the Python server SDK used from Django work
+against Arc by changing the host and credentials only. Arc's own SDKs will follow.
+
+## What you get
+
+<Cards>
+  <Card
+    title="Every channel type"
+    description="Public, private, presence, end-to-end encrypted, and cache channels, plus per-user channels for signed-in connections."
+    href="/docs/protocol/channels"
+  />
+  <Card
+    title="A signed HTTP API"
+    description="Publish single and batch events, query occupancy and presence, and disconnect a user, with the signing scheme the server SDKs already use."
+    href="/docs/api/http"
+  />
+  <Card
+    title="Webhooks"
+    description="Learn when channels fill and empty without polling, signed so your SDK can verify them, with retries and debouncing."
+    href="/docs/api/webhooks"
+  />
+  <Card
+    title="An operator's dashboard"
+    description="Live connection counts, credentials, webhook configuration and an audit log, behind your own identity provider."
+    href="/docs/operations/dashboard"
+  />
+</Cards>
+
+## How the pieces fit
+
+- **Clients** connect over WebSocket to `/app/<key>` and subscribe to channels. Private,
+  presence and encrypted channels are authorised by *your* backend, which signs a token
+  with the app secret.
+- **Your backend** publishes events over the signed HTTP API, and hears about channel
+  activity through webhooks.
+- **Arc** holds the connections, fans events out, tracks presence, and reports what it is
+  doing through Prometheus metrics and the dashboard.
+
+An **app** is the unit of isolation: one set of credentials, its own channels, its own
+limits. Most installations have one per product.
+
+## Where to start
+
+<Cards>
+  <Card title="Run it locally" href="/docs/getting-started" description="Docker Compose brings up Arc, Postgres, Keycloak and a demo app." />
+  <Card title="Connect a browser" href="/docs/guides/javascript" description="Subscribe to a channel from the JavaScript client SDK." />
+  <Card title="Publish from Django" href="/docs/guides/django" description="Use the Python server SDK unmodified." />
+</Cards>

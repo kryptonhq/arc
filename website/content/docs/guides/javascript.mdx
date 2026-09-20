@@ -1,0 +1,97 @@
+---
+title: Browser client
+description: Subscribing from a browser with the JavaScript client SDK.
+---
+
+Arc speaks the Channels protocol v7, so the existing JavaScript SDK works against it once
+you point it at your host.
+
+```bash
+npm install pusher-js
+```
+
+```js
+import Pusher from 'pusher-js';
+
+const arc = new Pusher('<app key>', {
+  wsHost: 'arc.example.com',
+  wsPort: 443,
+  wssPort: 443,
+  forceTLS: true,
+  enabledTransports: ['ws', 'wss'],
+  cluster: 'arc', // required by the SDK, ignored by Arc
+  channelAuthorization: { endpoint: '/realtime/auth/', transport: 'ajax' },
+  userAuthentication: { endpoint: '/realtime/auth/user/', transport: 'ajax' },
+});
+```
+
+The dashboard prints this snippet with your own key, host and port filled in.
+
+## Channels
+
+```js
+// Public: anyone may subscribe.
+arc.subscribe('orders').bind('created', (order) => console.log(order));
+
+// Private: your backend authorises the subscription.
+const account = arc.subscribe('private-account-42');
+
+// Presence: you also learn who else is here.
+const room = arc.subscribe('presence-room-1');
+room.bind('pusher:subscription_succeeded', () => console.log(room.members.count));
+room.bind('pusher:member_added', (member) => console.log(member.id, member.info));
+room.bind('pusher:member_removed', (member) => console.log(member.id));
+```
+
+## Client events
+
+On private and presence channels, and when the app allows it, a client can publish
+straight to the others:
+
+```js
+room.trigger('client-typing', { name: 'Ada' });
+```
+
+Keep it under 10 per second per connection. Over that, Arc replies with an error frame
+(code `4301`) and leaves the connection open.
+
+## Cache channels
+
+```js
+const status = arc.subscribe('cache-deploy-status');
+status.bind('status', render);            // the retained event arrives on subscribe
+status.bind('pusher:cache_miss', () => {  // nothing retained yet
+  fetch('/api/deploy-status').then(...);
+});
+```
+
+## Encrypted channels
+
+Use the build that bundles the crypto, and subscribe to a `private-encrypted-` channel.
+Your authorisation endpoint returns the shared secret, and decryption is transparent:
+
+```js
+import Pusher from 'pusher-js/with-encryption';
+
+arc.subscribe('private-encrypted-notes').bind('note', (note) => console.log(note));
+```
+
+## Signing in
+
+```js
+arc.signin();                               // uses userAuthentication
+arc.user.bind('notification', render);      // events your backend sends to this user
+```
+
+## Handling errors
+
+```js
+arc.connection.bind('state_change', ({ current }) => setStatus(current));
+arc.connection.bind('error', (err) => console.warn(err));
+channel.bind('pusher:subscription_error', ({ status }) => {
+  if (status === 403) showUpgradePrompt();
+});
+```
+
+The SDK reconnects on its own for codes in the retry bands; see
+[errors and close codes](/docs/protocol/errors).

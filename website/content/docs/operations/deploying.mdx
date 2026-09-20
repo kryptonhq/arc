@@ -1,0 +1,73 @@
+---
+title: Deploying
+description: Running the image, what sits in front of it, and the limits that matter.
+---
+
+Arc is published as a multi-architecture image for `linux/amd64` and `linux/arm64`:
+
+```bash
+docker pull kryptonhq/arc:latest
+```
+
+Tags are `latest` and a version per release (`0.1.0`, …). Pin the version in production.
+Each tag is started against a throwaway Postgres in CI before it is published, so a tag
+that exists has booted at least once.
+
+```bash
+docker run -p 4000:4000 \
+  -e DATABASE_URL=postgres://arc:arc@postgres:5432/arc \
+  -e SECRET_KEY_BASE=... -e ARC_ENCRYPTION_KEY=... \
+  -e PHX_HOST=arc.example.com \
+  -e ARC_OIDC_ISSUER=... -e ARC_OIDC_CLIENT_ID=... -e ARC_OIDC_CLIENT_SECRET=... \
+  -e ARC_ADMIN_EMAILS=you@example.com \
+  kryptonhq/arc:0.1.0
+```
+
+Migrations run at startup, so a fresh Postgres plus the image is a working install. See
+[configuration](/docs/configuration) for the full list of variables.
+
+## In front of Arc
+
+TLS terminates at your proxy, which must forward WebSocket upgrades:
+
+```nginx
+location / {
+  proxy_pass http://arc;
+  proxy_http_version 1.1;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection "upgrade";
+  proxy_set_header Host $host;
+  proxy_read_timeout 300s;
+}
+```
+
+Raise the idle timeout: connections are meant to stay open, and a proxy that closes them
+after 60 seconds turns into a reconnect storm.
+
+## Health checks
+
+| Path | Answers 200 when |
+| --- | --- |
+| `/health/live` | The VM is running |
+| `/health/ready` | Migrations are applied and the app cache is warm |
+
+Point load balancers and Kubernetes readiness probes at `/health/ready`, so traffic waits
+until a node can actually serve it. Use `/health/live` for liveness only — restarting a
+node because it is still warming would be a loop.
+
+## File descriptors
+
+Every connection is a socket. Raise the limit well above your connection ceiling:
+
+```yaml
+ulimits:
+  nofile:
+    soft: 65536
+    hard: 65536
+```
+
+## Shutting down
+
+On `SIGTERM`, Arc closes connections with a reconnect-after-backoff code, so clients move
+to another node instead of treating the shutdown as a failure. Give the container enough
+grace period for that to finish, and roll one node at a time.

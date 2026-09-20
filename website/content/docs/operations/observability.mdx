@@ -1,0 +1,49 @@
+---
+title: Metrics and logs
+description: What Arc reports, and what to watch when it is under pressure.
+---
+
+`GET /metrics` serves Prometheus text. Set `ARC_METRICS_AUTH_TOKEN` to require a bearer
+token.
+
+| Metric | Type | Labels |
+| --- | --- | --- |
+| `arc_connections_active` | gauge | `app_id`, `node` |
+| `arc_connections_total` | counter | `app_id` |
+| `arc_connection_duration_seconds` | histogram | `app_id` |
+| `arc_channels_occupied` | gauge | `app_id`, `type` |
+| `arc_subscriptions_active` | gauge | `app_id` |
+| `arc_presence_members` | gauge | `app_id` |
+| `arc_messages_sent_total` | counter | `app_id`, `source` |
+| `arc_messages_received_total` | counter | `app_id` |
+| `arc_broadcast_duration_seconds` | histogram | `app_id` |
+| `arc_api_requests_total` | counter | `app_id`, `endpoint`, `status` |
+| `arc_api_request_duration_seconds` | histogram | `endpoint` |
+| `arc_auth_failures_total` | counter | `app_id`, `reason` |
+| `arc_rate_limit_hits_total` | counter | `app_id`, `kind` |
+| `arc_webhook_deliveries_total` | counter | `status` |
+| `arc_webhook_queue_depth` | gauge | — |
+
+Standard BEAM metrics are exported too: memory by type, run queue lengths, process and
+port counts, and scheduler utilisation.
+
+<Callout type="warn" title="No channel names in labels">
+  Nothing is labelled with a channel, socket or user id. An app with 50,000 channels would
+  otherwise produce 50,000 time series per metric and take Prometheus down. Per-channel
+  numbers belong in the dashboard, queried on demand.
+</Callout>
+
+## What to watch
+
+- **Run queue length** is the first number to move when a node is in trouble, before
+  latency shows it.
+- **Binary memory** is where leaks appear, since every frame is a binary.
+- **`arc_rate_limit_hits_total`** tells you whether a client is being throttled before
+  anyone reports it as "messages going missing".
+- **`arc_webhook_queue_depth`** rising means your endpoint is slow or failing.
+
+## Logs
+
+Production logs are JSON. Connections are logged at debug, auth failures at info with the
+app id and reason, webhook failures at warning, crashes at error. Secrets, signatures and
+event payloads are never logged.

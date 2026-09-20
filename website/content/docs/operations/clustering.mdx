@@ -1,0 +1,40 @@
+---
+title: Clustering
+description: Running several nodes, and what is shared between them.
+---
+
+Set a strategy and a shared cookie, and nodes find each other:
+
+| Variable | Value |
+| --- | --- |
+| `ARC_CLUSTER_STRATEGY` | `gossip` for Docker networks, `dns` for Kubernetes |
+| `ARC_CLUSTER_DNS_QUERY` | The headless service name, for `dns` |
+| `RELEASE_COOKIE` | The same value on every node |
+
+## What crosses nodes
+
+- **Publishes.** An event published on one node reaches subscribers on all of them. Each
+  node fans out into its own registry, and the frame is encoded once per broadcast rather
+  than once per subscriber.
+- **Presence.** Membership is a CRDT, so it converges after a partition without any node
+  coordinating. A node that dies has its members removed elsewhere within about five
+  seconds.
+- **App configuration.** Credential changes are published to every node, so a rotated
+  secret stops verifying everywhere as soon as the dashboard returns.
+- **Channel queries.** Occupancy asks every node and sums the answers.
+
+## What stays local
+
+- **Rate limits.** Token buckets are per node, so a cluster-wide limit is approximate: N
+  nodes allow up to N times the rate. That is deliberate — an exact global limiter would
+  put a coordination hop in the publish path.
+- **Cache channel retention.** Each node keeps the last event it saw for a cache channel.
+  A subscriber may get a cache miss on a node that has not seen the event yet.
+- **Metrics.** Each node reports its own numbers; the dashboard sums them.
+
+## Sizing
+
+Connections are cheap: one process and one socket each. What moves first under load is
+the run queue, so watch `vm_total_run_queue_lengths_total` alongside connection counts.
+Add nodes when a single one is saturating its schedulers, and remember that every node
+holds a full copy of presence.

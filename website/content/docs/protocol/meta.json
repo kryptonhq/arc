@@ -1,0 +1,5 @@
+{
+  "title": "Protocol",
+  "icon": "Cable",
+  "pages": ["connection", "channels", "presence", "client-events", "errors"]
+}

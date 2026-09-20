@@ -4,6 +4,8 @@ Arc is a self-hosted realtime messaging server: persistent WebSocket connections
 channel-based pub/sub, presence, and a signed HTTP API that application backends call
 to publish events.
 
+Full documentation lives in [`website/`](website/README.md) and is published at `/docs`.
+
 Arc speaks the **Channels protocol, version 7**. Existing client SDKs for that
 protocol (JavaScript, iOS, Android, Flutter) and the Python server SDK used from
 Django work against Arc by changing the host and credentials only. Arc's own SDKs will
@@ -371,7 +373,8 @@ mix test --only cluster           # three-node cluster
 test/integration/run.sh           # real client (JavaScript) and server (Python) SDKs
 ```
 
-Load tests live in [`loadtest/`](loadtest/README.md).
+Load tests live in [`loadtest/`](loadtest/README.md), and the documentation site in
+[`website/`](website/README.md).
 
 ## License
 

@@ -1,0 +1,31 @@
+---
+title: The demo app
+description: A Next.js app that exercises every feature against a local Arc.
+---
+
+The repository ships a Next.js app that uses the real client and server SDKs against a
+local Arc. It is the fastest way to see what the protocol feels like, and a reference for
+wiring your own app.
+
+```bash
+docker compose up --build
+# then open http://localhost:3000 in two browsers with different names
+```
+
+| Panel | Feature it shows |
+| --- | --- |
+| Chat | Public channel, published by the server, with `socket_id` exclusion |
+| Typing indicator | Client events on a presence channel |
+| Who's here | Presence with member info |
+| Current status | A cache channel replaying its last event to new tabs |
+| Encrypted notes | End-to-end encryption; the server only relays ciphertext |
+| Users | Sign-in, sending to one user, and disconnecting them |
+| Occupied channels | Channel queries through the HTTP API |
+| Webhooks received | Signed webhooks, verified with the server SDK |
+
+The compose stack provisions the demo's app on first boot and passes its credentials to
+the demo through a shared volume, so there is nothing to configure.
+
+The interesting files are `lib/arc.js` (server-side SDK setup), `app/api/*` (authorising,
+publishing, webhooks) and `components/Demo.jsx` (subscriptions). Source:
+[`examples/nextjs-demo`](https://github.com/kryptonhq/arc/tree/main/examples/nextjs-demo).

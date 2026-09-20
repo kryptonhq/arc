@@ -1,0 +1,73 @@
+---
+title: Channels
+description: The seven channel types, how names work, and what each type allows.
+---
+
+A channel is just a name. Its prefix decides whether subscribing needs authorisation,
+whether members are tracked, whether clients may publish to it, and whether the last
+event is kept for later subscribers.
+
+| Prefix | Authorised | Presence | Client events | Encrypted | Last event kept |
+| --- | --- | --- | --- | --- | --- |
+| *(none)* | No | No | No | No | No |
+| `private-` | Yes | No | Yes | No | No |
+| `private-encrypted-` | Yes | No | No | Yes | No |
+| `presence-` | Yes | Yes | Yes | No | No |
+| `cache-` | No | No | No | No | Yes |
+| `private-cache-` | Yes | No | Yes | No | Yes |
+| `presence-cache-` | Yes | Yes | Yes | No | Yes |
+| `#server-to-user-<id>` | Signed-in user only | No | No | No | No |
+
+Names are at most 164 characters from `[A-Za-z0-9_\-=@,.;]`. Anything else is rejected
+rather than quietly normalised, so a typo surfaces immediately instead of creating a
+second channel nobody is listening to.
+
+## Subscribing
+
+```json
+{
+  "event": "pusher:subscribe",
+  "data": {
+    "channel": "private-orders",
+    "auth": "<app key>:<hex HMAC-SHA256 of socket_id:channel>",
+    "channel_data": "{\"user_id\":\"42\"}"
+  }
+}
+```
+
+`auth` is required for every authorised type, and your backend produces it — see
+[authorising channels](/docs/api/authorising). `channel_data` is only for presence
+channels, must contain a `user_id`, and is part of the signature.
+
+Arc replies with `pusher_internal:subscription_succeeded`. For presence channels its
+payload lists the members already there.
+
+When authorisation fails, the channel receives `pusher:subscription_error` with a status:
+`401` for a bad signature, `403` when the app forbids it (a full presence channel, or a
+user channel that is not yours), `400` for malformed input.
+
+## Cache channels
+
+Arc keeps the last event published to a `cache-` channel and replays it to anyone who
+subscribes afterwards, right after `subscription_succeeded`. It is how a client can learn
+the current state of something without asking your backend for it.
+
+If nothing is retained yet, the subscriber gets `pusher:cache_miss` instead — your cue to
+publish the current state, which you can act on through the
+[`cache_miss` webhook](/docs/api/webhooks).
+
+Retention is per node and does not survive a restart. That is the documented behaviour,
+not an accident: treat it as a convenience, not storage.
+
+## Encrypted channels
+
+For `private-encrypted-` channels your backend encrypts the payload before publishing and
+the client decrypts it. Arc relays ciphertext and never holds the plaintext.
+
+Generate an encryption master key on the app's page in the dashboard and pass it to your
+server SDK (for example `encryption_master_key_base64`). The per-channel key is
+`SHA-256(channel name + master key)`, which is what the SDKs derive, and the payload
+travels as a JSON object with base64 `nonce` and `ciphertext`.
+
+Arc's part is to refuse anything that is not a well-formed envelope, and to refuse
+publishing at all when the app has no master key.

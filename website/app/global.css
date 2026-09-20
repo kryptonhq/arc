@@ -1,0 +1,40 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+/* The dashboard's palette and type, so the docs and the product look like one thing.
+   ink     deep blue-graphite
+   signal  actions and links
+   live    anything that is measuring right now */
+@theme {
+  --color-arc-ink: #14202b;
+  --color-arc-signal: #2a4be0;
+  --color-arc-live: #0e9a80;
+
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:root {
+  --color-fd-primary: var(--color-arc-signal);
+  --color-fd-ring: var(--color-arc-signal);
+}
+
+.dark {
+  --color-fd-primary: #8fa4ff;
+  --color-fd-ring: #8fa4ff;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* Numbers in tables shouldn't jitter between rows. */
+table {
+  font-variant-numeric: tabular-nums;
+}

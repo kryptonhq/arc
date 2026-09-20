@@ -1,0 +1,65 @@
+---
+title: Webhooks
+description: Learning when channels fill and empty, without polling.
+---
+
+Arc calls your backend when channel state changes, so you can track occupancy without
+asking. Configure endpoints per app in the dashboard, and pick which events each one
+wants.
+
+| Event | Fires when |
+| --- | --- |
+| `channel_occupied` | The first subscriber in the cluster joins |
+| `channel_vacated` | The last subscriber leaves |
+| `member_added` | A user id joins a presence channel for the first time |
+| `member_removed` | A user id's last connection leaves |
+| `client_event` | A client publishes to other clients |
+| `cache_miss` | A cache channel is subscribed to with nothing retained |
+
+## The request
+
+Events that happen close together arrive in one request:
+
+```json
+{
+  "time_ms": 1726732800000,
+  "events": [
+    { "name": "channel_occupied", "channel": "presence-room-1" },
+    { "name": "member_added", "channel": "presence-room-1", "user_id": "42" }
+  ]
+}
+```
+
+Two headers let you verify it: `X-Pusher-Key` with the app key, and
+`X-Pusher-Signature`, the hex HMAC-SHA256 of the raw body keyed by the app secret. Server
+SDKs check this for you:
+
+```python
+webhook = arc.validate_webhook(key=request.headers["X-Pusher-Key"],
+                               signature=request.headers["X-Pusher-Signature"],
+                               body=request.body)
+if webhook is None:
+    return HttpResponseForbidden()
+```
+
+Verify against the **raw bytes**, before any JSON parsing re-orders keys. If you give an
+endpoint its own secret, Arc adds a second signature in `X-Arc-Signature`, so a receiver
+can verify without holding the app secret.
+
+## Flapping, and what Arc does about it
+
+A client that reconnects — a laptop waking up, a page navigation — would otherwise
+produce a `channel_vacated` immediately followed by a `channel_occupied`. Arc holds
+vacated events (and `member_removed`) for two seconds; if the channel refills inside that
+window, neither event is sent. Your backend sees what actually happened, not what the
+network did.
+
+## Delivery
+
+- Requests time out after 10 seconds.
+- `5xx` responses and timeouts are retried after 1s, 5s, 30s, 2m and 10m, then marked
+  failed.
+- `4xx` responses are not retried: the endpoint is misconfigured, and hammering it helps
+  nobody.
+- Deliveries are recorded in the database, survive a node restart, and are visible with
+  their failure reasons in the dashboard. Rows older than seven days are pruned.
