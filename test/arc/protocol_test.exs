@@ -55,8 +55,12 @@ defmodule Arc.ProtocolTest do
 
     assert Jason.decode!(Protocol.member_added("c", "u", nil))["data"] == ~s({"user_id":"u"})
 
-    assert Jason.decode!(Protocol.member_added("c", "u", %{"a" => 1}))["data"] ==
-             ~s({"user_id":"u","user_info":{"a":1}})
+    # Compared as data, not as text: the order of keys within the payload is not part
+    # of the protocol (and small-map iteration order differs between OTP releases).
+    assert Protocol.member_added("c", "u", %{"a" => 1})
+           |> Jason.decode!()
+           |> Map.fetch!("data")
+           |> Jason.decode!() == %{"user_id" => "u", "user_info" => %{"a" => 1}}
 
     assert Jason.decode!(Protocol.encode("e", "c", "d", user_id: nil)) == %{
              "event" => "e",
