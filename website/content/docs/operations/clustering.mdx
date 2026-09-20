@@ -1,15 +1,43 @@
 ---
 title: Clustering
-description: Running several nodes, and what is shared between them.
+description: Running several nodes: how they find each other, what is shared, how to verify it, and what a rolling restart looks like.
 ---
 
 Set a strategy and a shared cookie, and nodes find each other:
 
 | Variable | Value |
 | --- | --- |
-| `ARC_CLUSTER_STRATEGY` | `gossip` for Docker networks, `dns` for Kubernetes |
+| `ARC_CLUSTER_STRATEGY` | `gossip` for a flat network (Docker, one VPC), `dns` for Kubernetes |
 | `ARC_CLUSTER_DNS_QUERY` | The headless service name, for `dns` |
-| `RELEASE_COOKIE` | The same value on every node |
+| `RELEASE_COOKIE` | The same random value on every node; it authenticates nodes to each other |
+
+Nodes are named `arc@<ip>` from the host's address. Set `RELEASE_NODE` to name them
+yourself; the release refuses to start when it cannot determine the address.
+
+## What has to be open
+
+| Traffic | Port | Between |
+| --- | --- | --- |
+| Clients, API, dashboard | `PORT` (4000) | Load balancer → nodes |
+| Erlang distribution | 4369 (EPMD) and a dynamic port per node | Node ↔ node only |
+| Gossip discovery | UDP 45892 | Node ↔ node only |
+
+Never expose the distribution ports past the nodes' own network. Anyone with the
+cookie and reach to them has a shell on the node. Pin the dynamic range with
+`ERL_FLAGS="-kernel inet_dist_listen_min 9100 inet_dist_listen_max 9110"` when a
+firewall needs a fixed set.
+
+## Verifying the cluster formed
+
+From any node:
+
+```bash
+bin/arc rpc 'IO.inspect(Node.list())'
+```
+
+lists the others. The dashboard overview shows every node with its own counts, and
+`arc_connections_active` on `/metrics` is per node, so a scrape of each one summed
+should equal the dashboard total.
 
 ## What crosses nodes
 
@@ -28,16 +56,64 @@ Set a strategy and a shared cookie, and nodes find each other:
 ## What stays local
 
 - **Rate limits.** Token buckets are per node, so a cluster-wide limit is approximate: N
-  nodes allow up to N times the rate. That is deliberate — an exact global limiter would
+  nodes allow up to N times the rate. That is deliberate: an exact global limiter would
   put a coordination hop in the publish path. This applies to the API limit, the
   per-address connection limit, and the per-connection subscribe and auth-failure
   limits alike.
-- **Readiness.** Each node checks Postgres and drains on its own, so a rolling restart
-  takes one node out of the balancer at a time. See
-  [high availability](/docs/operations/high-availability) for the full sequence.
 - **Cache channel retention.** Each node keeps the last event it saw for a cache channel.
   A subscriber may get a cache miss on a node that has not seen the event yet.
+- **Readiness and drain.** Each node checks Postgres and drains on its own, so a rolling
+  restart takes one node out of the balancer at a time.
 - **Metrics.** Each node reports its own numbers; the dashboard sums them.
+
+## The load balancer
+
+- Forward WebSocket upgrades and keep idle connections open longer than the 120 s
+  activity timeout.
+- Health-check `/health/ready` every second or two with a failure threshold of one, so a
+  draining node stops receiving connections inside its drain window.
+- No sticky sessions. Any node serves any client, and a client that reconnects can land
+  anywhere.
+- Set `ARC_TRUSTED_PROXIES` to the balancer's addresses so the per-address limit and the
+  logs see clients rather than the balancer.
+
+## A rolling restart, node by node
+
+1. The node gets `SIGTERM`. `/health/ready` turns `503 draining` and new connections
+   are refused with `4101`.
+2. `ARC_DRAIN_SECONDS` pass. The balancer's check fails and it stops routing here.
+3. Every connection is closed with `4101`. SDKs reconnect after a backoff, through the
+   balancer, onto a ready node. A subscriber on another node notices nothing.
+4. The node stops, the new one starts, warms its app cache, rejoins the cluster, and
+   turns ready. Only then move to the next node.
+
+The platform's grace period must exceed the drain window plus a margin, or the VM is
+killed mid-drain. See [high availability](/docs/operations/high-availability) for the
+full runbook and the failure playbook.
+
+## Failure modes
+
+| Failure | Effect |
+| --- | --- |
+| A node dies | Its clients drop (TCP close, no code) and reconnect elsewhere. Its presence members leave within ~5 s. When it returns it rejoins on its own |
+| Partition | Both sides keep serving their own clients. Presence diverges during the split and converges on rejoin. Publishes made on one side do not reach the other until then. The cut node's Postgres sessions stay open server-side until keepalives reclaim them; see [high availability](/docs/operations/high-availability#topology) |
+| Postgres unreachable | Every node reports `503 database unreachable`. Connections, subscribe, publish and presence keep working; the dashboard, webhook persistence and sign-in do not |
+| Cookie mismatch | The node boots but never joins. `Node.list()` stays empty and the log shows the connection attempt being refused |
+
+## Proving it
+
+The repository ships a three-node stack behind a load balancer and a suite that asserts
+every promise on this page against real containers: cross-node publish, presence
+convergence and removal on kill, secret rotation, summed channel queries, the drain
+sequence during a rolling restart, node loss and return, a network partition, and the
+documented per-node cache behaviour.
+
+```bash
+docker compose -f docker-compose.cluster.yml up --build --wait
+mix test --only compose
+```
+
+CI runs the same suite on every change to the server.
 
 ## Sizing
 

@@ -1,0 +1,129 @@
+# Three Arc nodes clustered over gossip, behind a load balancer, on one Postgres.
+#
+#   docker compose -f docker-compose.cluster.yml up --build --wait
+#
+# The balancer listens on http://localhost:4100. Each node is also published directly
+# (4101, 4102, 4103) so a test can connect to a specific node and prove that a publish
+# on one reaches a subscriber on another. Postgres is on 5443 so it does not collide
+# with the single-node stack. The seeded app's credentials land in ./tmp/cluster.
+#
+# The cluster behaviour suite runs against this stack:
+#
+#   mix test --only compose
+#
+# Uses its own project name so `docker compose down` here never touches the
+# single-node stack.
+name: arc-cluster
+
+x-arc: &arc
+  image: arc:local
+  build: .
+  environment: &arc-env
+    DATABASE_URL: postgres://arc:arc@postgres:5432/arc
+    SECRET_KEY_BASE: dev-only-secret-key-base-change-me-dev-only-secret-key-base-change-me-00
+    ARC_ENCRYPTION_KEY: ZGV2LW9ubHktZW5jcnlwdGlvbi1rZXktMzJieXRlcyE=
+    PHX_HOST: localhost
+    PHX_PUBLIC_PORT: "4100"
+    PHX_PUBLIC_SCHEME: http
+    PORT: "4000"
+    # No identity provider runs in this stack; the dashboard signs in by password.
+    ARC_ADMIN_PASSWORD: arc-dev-password
+    ARC_ADMIN_EMAILS: admin@example.com
+    ARC_CLUSTER_STRATEGY: gossip
+    RELEASE_COOKIE: dev-only-cluster-cookie
+    # The balancer is the only trusted proxy; its addresses are on the compose network.
+    ARC_TRUSTED_PROXIES: 172.16.0.0/12
+    # Short so a restart in the suite takes seconds, still long enough for Caddy's
+    # 1 s health check to notice.
+    ARC_DRAIN_SECONDS: "3"
+    ARC_METRICS_AUTH_TOKEN: dev-only-metrics-token
+  depends_on:
+    seed:
+      condition: service_completed_successfully
+  stop_grace_period: 20s
+  ulimits:
+    nofile:
+      soft: 65536
+      hard: 65536
+  healthcheck:
+    test: ["CMD", "curl", "-fs", "http://127.0.0.1:4000/health/ready"]
+    interval: 2s
+    timeout: 3s
+    retries: 30
+    start_period: 10s
+
+services:
+  postgres:
+    image: postgres:16
+    # A node cut off by a partition (or a killed VM) never closes its connections;
+    # without keepalives Postgres holds them for hours and the node's reconnect hits
+    # "too many clients". Managed Postgres usually has keepalives on; set them yourself
+    # when you run your own. See the high-availability docs.
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+      - -c
+      - tcp_keepalives_idle=30
+      - -c
+      - tcp_keepalives_interval=10
+      - -c
+      - tcp_keepalives_count=3
+    environment:
+      POSTGRES_USER: arc
+      POSTGRES_PASSWORD: arc
+      POSTGRES_DB: arc
+    ports:
+      - "5443:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arc"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Migrates and seeds one app with client events, presence limits off, and
+  # subscription_count queries on, then writes its credentials for the suite.
+  seed:
+    image: arc:local
+    build: .
+    user: root
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *arc-env
+      ARC_CLUSTER_STRATEGY: none
+    volumes:
+      - ./tmp/cluster:/shared
+    command:
+      - sh
+      - -c
+      - >-
+        /app/bin/migrate &&
+        /app/bin/arc eval 'Arc.Release.write_app_credentials("/shared/arc-cluster.json",
+        %{"name" => "Cluster suite", "client_events_enabled" => true,
+        "enable_presence_limits" => false, "subscription_count_enabled" => true})'
+
+  arc1:
+    <<: *arc
+    ports: ["4101:4000"]
+  arc2:
+    <<: *arc
+    ports: ["4102:4000"]
+  arc3:
+    <<: *arc
+    ports: ["4103:4000"]
+
+  lb:
+    image: caddy:2
+    ports:
+      - "4100:4100"
+    volumes:
+      - ./docker/cluster/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      arc1:
+        condition: service_healthy
+      arc2:
+        condition: service_healthy
+      arc3:
+        condition: service_healthy
