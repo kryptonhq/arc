@@ -122,6 +122,24 @@ jobs:
       - run: mix deps.get
       - run: test/integration/run.sh
 
+  dependencies:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    # Only pull requests: the action compares a PR's dependencies against the base.
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          # Arc ships under Apache-2.0, so a dependency that would force the whole
+          # work open has to be a deliberate decision, not a silent upgrade.
+          deny-licenses: GPL-1.0-or-later, GPL-2.0-or-later, GPL-3.0-or-later, AGPL-1.0-or-later, AGPL-3.0-or-later, SSPL-1.0, BUSL-1.1, CC-BY-NC-4.0, Elastic-2.0
+          comment-summary-in-pr: on-failure
+          fail-on-severity: high
+
   docs:
     name: Documentation site builds
     runs-on: ubuntu-latest

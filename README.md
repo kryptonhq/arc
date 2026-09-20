@@ -385,3 +385,8 @@ Load tests live in [`loadtest/`](loadtest/README.md), and the documentation site
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+
+Arc's dependencies are MIT, Apache-2.0, ISC or BSD, with the exceptions and required
+attributions listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). That file also
+states what Arc is and is not: an independent implementation of the protocol its client
+and server SDKs speak, not affiliated with or endorsed by their authors.
