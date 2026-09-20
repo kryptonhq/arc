@@ -52,11 +52,16 @@ jobs:
               - 'mix.lock'
               - 'examples/nextjs-demo/**'
               - '.github/workflows/ci.yml'
+  # Every job below is a required check, so none of them may be skipped at the job
+  # level: GitHub reports a skipped job as "skipping", which never satisfies a
+  # required check and leaves the pull request unmergeable. Instead each job starts,
+  # finds it has nothing to do, and finishes green in a few seconds.
   test:
     needs: changes
-    if: needs.changes.outputs.server == 'true'
     name: Unit, property, protocol, failure
     runs-on: ubuntu-latest
+    env:
+      RUN: ${{ needs.changes.outputs.server }}
     services:
       postgres:
         image: postgres:16
@@ -67,24 +72,32 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U arc" --health-interval 2s --health-timeout 3s --health-retries 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: erlef/setup-beam@v1
+      - if: env.RUN == 'true'
+        uses: actions/checkout@v4
+      - if: env.RUN == 'true'
+        uses: erlef/setup-beam@v1
         with:
           elixir-version: ${{ env.ELIXIR_VERSION }}
           otp-version: ${{ env.OTP_VERSION }}
-      - uses: actions/cache@v4
+      - if: env.RUN == 'true'
+        uses: actions/cache@v4
         with:
           path: |
             deps
             _build
           key: mix-${{ runner.os }}-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('mix.lock') }}
-      - run: mix deps.get
-      - run: mix compile --warnings-as-errors
-      - run: mix format --check-formatted
+      - if: env.RUN == 'true'
+        run: mix deps.get
+      - if: env.RUN == 'true'
+        run: mix compile --warnings-as-errors
+      - if: env.RUN == 'true'
+        run: mix format --check-formatted
       # Runs the suite with coverage: fails below the floor in coveralls.json and
       # writes cover/cobertura.xml for Codecov.
-      - run: mix coveralls.cobertura
+      - if: env.RUN == 'true'
+        run: mix coveralls.cobertura
       - name: Critical modules at 100%
+        if: env.RUN == 'true'
         run: |
           mix coveralls.json > /dev/null
           python3 - <<'PY'
@@ -107,6 +120,7 @@ jobs:
           PY
 
       - name: Send coverage to Codecov
+        if: env.RUN == 'true'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -117,9 +131,10 @@ jobs:
 
   cluster:
     needs: changes
-    if: needs.changes.outputs.server == 'true'
     name: Cluster (three nodes)
     runs-on: ubuntu-latest
+    env:
+      RUN: ${{ needs.changes.outputs.server }}
     services:
       postgres:
         image: postgres:16
@@ -130,21 +145,25 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U arc" --health-interval 2s --health-timeout 3s --health-retries 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: erlef/setup-beam@v1
+      - if: env.RUN == 'true'
+        uses: actions/checkout@v4
+      - if: env.RUN == 'true'
+        uses: erlef/setup-beam@v1
         with:
           elixir-version: ${{ env.ELIXIR_VERSION }}
           otp-version: ${{ env.OTP_VERSION }}
-      - run: mix deps.get
-      - run: mix test.cluster
+      - if: env.RUN == 'true'
+        run: mix deps.get
+      - if: env.RUN == 'true'
+        run: mix test.cluster
 
   integration:
     needs: changes
-    if: needs.changes.outputs.server == 'true' || needs.changes.outputs.demo == 'true'
     name: Real SDKs (JavaScript client, Python server)
     runs-on: ubuntu-latest
     env:
       MIX_ENV: dev
+      RUN: ${{ needs.changes.outputs.server == 'true' || needs.changes.outputs.demo == 'true' }}
     services:
       postgres:
         image: postgres:16
@@ -155,19 +174,25 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U arc" --health-interval 2s --health-timeout 3s --health-retries 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: erlef/setup-beam@v1
+      - if: env.RUN == 'true'
+        uses: actions/checkout@v4
+      - if: env.RUN == 'true'
+        uses: erlef/setup-beam@v1
         with:
           elixir-version: ${{ env.ELIXIR_VERSION }}
           otp-version: ${{ env.OTP_VERSION }}
-      - uses: actions/setup-node@v4
+      - if: env.RUN == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: actions/setup-python@v5
+      - if: env.RUN == 'true'
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: mix deps.get
-      - run: test/integration/run.sh
+      - if: env.RUN == 'true'
+        run: mix deps.get
+      - if: env.RUN == 'true'
+        run: test/integration/run.sh
 
   dependencies:
     name: Dependency review
@@ -189,31 +214,40 @@ jobs:
 
   docs:
     needs: changes
-    if: needs.changes.outputs.docs == 'true'
     name: Documentation site builds
     runs-on: ubuntu-latest
+    env:
+      RUN: ${{ needs.changes.outputs.docs }}
     defaults:
       run:
         working-directory: website
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - if: env.RUN == 'true'
+        uses: actions/checkout@v4
+      - if: env.RUN == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: website/package-lock.json
-      - run: npm ci
-      - run: npm run build
+      - if: env.RUN == 'true'
+        run: npm ci
+      - if: env.RUN == 'true'
+        run: npm run build
 
   stack:
     needs: changes
-    if: needs.changes.outputs.packaging == 'true'
     name: Compose stack boots
     runs-on: ubuntu-latest
+    env:
+      RUN: ${{ needs.changes.outputs.packaging }}
     steps:
-      - uses: actions/checkout@v4
-      - run: docker compose up -d --build --wait
+      - if: env.RUN == 'true'
+        uses: actions/checkout@v4
+      - if: env.RUN == 'true'
+        run: docker compose up -d --build --wait
       - name: The dashboard, health and metrics endpoints answer
+        if: env.RUN == 'true'
         run: |
           set -e
           curl -fsS http://localhost:4000/health/live > /dev/null
