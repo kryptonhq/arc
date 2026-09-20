@@ -91,6 +91,7 @@ defmodule Arc.MixProject do
       {:oidcc, "~> 3.2"},
       {:logger_json, "~> 7.0"},
       {:excoveralls, "~> 0.18", only: :test},
+      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false},
       {:stream_data, "~> 1.1", only: [:dev, :test]},
       {:mint_web_socket, "~> 1.0", only: :test}
     ]

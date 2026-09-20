@@ -1,0 +1,136 @@
+name: Security and licences
+
+# Two layers:
+#
+#   audit   free, no accounts: Hex advisories, retired packages, npm advisories.
+#           Runs on every push, pull request and nightly, so an advisory published
+#           after a merge still reaches us.
+#   snyk    vulnerabilities across Elixir and npm, when SNYK_TOKEN is set.
+#   fossa   licence obligations and attribution, when FOSSA_API_KEY is set.
+#
+# The paid scanners skip themselves when their token is absent, so a fork or a
+# checkout without secrets still gets the free layer rather than a red build.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * *"
+
+env:
+  ELIXIR_VERSION: "1.18.4"
+  OTP_VERSION: "27.3"
+
+jobs:
+  audit:
+    name: Advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+      - run: mix deps.get
+
+      # Known vulnerabilities in Hex dependencies.
+      - run: mix deps.audit
+
+      # Packages the ecosystem has retired or flagged.
+      - run: mix hex.audit
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: npm advisories
+        run: |
+          set -e
+          for project in website examples/nextjs-demo; do
+            echo "== $project"
+            (cd "$project" && npm audit --audit-level=high)
+          done
+
+  snyk:
+    name: Snyk
+    runs-on: ubuntu-latest
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip without a token
+        if: ${{ env.SNYK_TOKEN == '' }}
+        run: echo "SNYK_TOKEN is not set; skipping. See README, 'Security and licence scanning'."
+
+      - uses: erlef/setup-beam@v1
+        if: ${{ env.SNYK_TOKEN != '' }}
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+      - if: ${{ env.SNYK_TOKEN != '' }}
+        run: mix deps.get
+      - uses: snyk/actions/setup@master
+        if: ${{ env.SNYK_TOKEN != '' }}
+
+      # Elixir is supported through the CLI only, which is what runs here.
+      - name: Elixir dependencies
+        if: ${{ env.SNYK_TOKEN != '' }}
+        run: snyk test --file=mix.exs --severity-threshold=high
+
+      - name: JavaScript dependencies
+        if: ${{ env.SNYK_TOKEN != '' }}
+        run: |
+          set -e
+          for project in website examples/nextjs-demo; do
+            snyk test --file="$project/package-lock.json" --severity-threshold=high
+          done
+
+      # Keep a snapshot on main so Snyk can alert when a new advisory lands.
+      - name: Record the dependency snapshot
+        if: ${{ env.SNYK_TOKEN != '' && github.event_name == 'push' }}
+        run: snyk monitor --all-projects --exclude=node_modules,deps,_build || true
+
+  fossa:
+    name: FOSSA
+    runs-on: ubuntu-latest
+    env:
+      FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip without a key
+        if: ${{ env.FOSSA_API_KEY == '' }}
+        run: echo "FOSSA_API_KEY is not set; skipping. See README, 'Security and licence scanning'."
+
+      - uses: erlef/setup-beam@v1
+        if: ${{ env.FOSSA_API_KEY != '' }}
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+      - if: ${{ env.FOSSA_API_KEY != '' }}
+        run: mix deps.get
+
+      - uses: fossas/fossa-action@main
+        if: ${{ env.FOSSA_API_KEY != '' }}
+        with:
+          api-key: ${{ env.FOSSA_API_KEY }}
+
+      # Reports policy issues without failing the run. A flagged licence is a
+      # decision — accept it with a notice, or replace the dependency — and that
+      # decision is made in the FOSSA app, not by a red build. Drop
+      # continue-on-error once the policy has been triaged and should hold the line.
+      - uses: fossas/fossa-action@main
+        id: policy
+        continue-on-error: true
+        if: ${{ env.FOSSA_API_KEY != '' }}
+        with:
+          api-key: ${{ env.FOSSA_API_KEY }}
+          run-tests: true
+
+      - name: Policy summary
+        if: ${{ env.FOSSA_API_KEY != '' }}
+        run: |
+          if [ "${{ steps.policy.outcome }}" = "failure" ]; then
+            echo "FOSSA reported policy issues. A push-only key cannot print them;" >> "$GITHUB_STEP_SUMMARY"
+            echo "see https://app.fossa.com and THIRD-PARTY-NOTICES.md." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "FOSSA policy clean." >> "$GITHUB_STEP_SUMMARY"
+          fi

@@ -15,7 +15,7 @@ defmodule Arc.Metrics.Aggregator do
 
   @nodes_topic "arc:stats:nodes"
   @topic "arc:stats"
-  @interval 1_000
+  @default_interval 1_000
   @stale_after 5_000
   # Two minutes of per-second snapshots, so a dashboard opened now can draw the
   # recent past instead of starting from an empty chart.
@@ -43,7 +43,7 @@ defmodule Arc.Metrics.Aggregator do
       counter_ref()
     )
 
-    Process.send_after(self(), :tick, @interval)
+    Process.send_after(self(), :tick, interval())
     {:ok, %{nodes: %{}, last_sent: 0, snapshot: empty_snapshot(), history: []}}
   end
 
@@ -72,7 +72,7 @@ defmodule Arc.Metrics.Aggregator do
     node_stats = collect(max(sent - state.last_sent, 0))
     Phoenix.PubSub.broadcast(Arc.PubSub, @nodes_topic, {:node_stats, node(), node_stats})
 
-    Process.send_after(self(), :tick, @interval)
+    Process.send_after(self(), :tick, interval())
     {:noreply, %{state | last_sent: sent}}
   end
 
@@ -157,6 +157,12 @@ defmodule Arc.Metrics.Aggregator do
         end)
         |> Enum.sort_by(& &1.name)
     }
+  end
+
+  # How often a node publishes its numbers. Tests raise this so an injected snapshot
+  # is not overwritten by a real one mid-assertion.
+  defp interval do
+    Application.get_env(:arc, Arc.Metrics, []) |> Keyword.get(:interval, @default_interval)
   end
 
   defp sample(snapshot) do

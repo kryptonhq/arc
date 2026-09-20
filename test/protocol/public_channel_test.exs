@@ -25,8 +25,14 @@ defmodule Arc.Protocol.PublicChannelTest do
              next_frame!(client)
 
     WsClient.send_json(client, %{event: "pusher:unsubscribe", data: %{channel: "news"}})
-    # Unsubscribe has no acknowledgement; confirm by the absence of later events.
-    eventually(fn -> Arc.Realtime.Occupancy.subscription_count(config.id, "news") == 0 end)
+
+    # Unsubscribe has no acknowledgement, so wait for the registry, which is what
+    # decides delivery. Occupancy counts follow it asynchronously, and a count of zero
+    # can mean "not counted yet" rather than "no longer subscribed".
+    eventually(fn ->
+      Registry.lookup(Arc.Realtime.Registries.Channels, {config.id, "news"}) == []
+    end)
+
     :ok = Realtime.publish(config, [news], "headline", "{}")
     refute_frame(client)
   end

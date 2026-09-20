@@ -25,6 +25,9 @@ config :arc, Arc.Realtime,
   pong_timeout: 30_000,
   idle_check_interval: 5_000
 
+# The dashboard's live numbers are driven by tests, not by the clock.
+config :arc, Arc.Metrics, interval: 60_000
+
 config :arc, Arc.Webhooks,
   batch_window: 20,
   debounce_ms: 200,
