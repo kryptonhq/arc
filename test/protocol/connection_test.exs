@@ -66,6 +66,17 @@ defmodule Arc.Protocol.ConnectionTest do
       assert {4004, _} = await_close!(second)
     end
 
+    test "rejects connections with 4100 until the app cache is warm", %{config: config} do
+      ready = {Arc.Apps.Cache, :ready}
+      :persistent_term.put(ready, false)
+      on_exit(fn -> :persistent_term.put(ready, true) end)
+
+      {:ok, client} = WsClient.connect("/app/#{config.key}?protocol=7")
+      assert %{"data" => %{"code" => 4100, "message" => message}} = next_frame!(client)
+      assert message =~ "starting up"
+      assert {4100, _} = await_close!(client)
+    end
+
     test "rejects connections over the node limit with 4100", %{config: config} do
       put_realtime(max_connections_per_node: 0)
       {:ok, client} = WsClient.connect("/app/#{config.key}?protocol=7")

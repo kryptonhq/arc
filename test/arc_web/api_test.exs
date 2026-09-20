@@ -1,6 +1,8 @@
 defmodule ArcWeb.ApiTest do
   use Arc.RealtimeCase
 
+  import ExUnit.CaptureLog
+
   alias Arc.Apps
 
   @base "http://localhost:4002"
@@ -322,6 +324,19 @@ defmodule ArcWeb.ApiTest do
   end
 
   describe "request signing" do
+    test "rejections are logged at info with the app id and reason", %{config: config} do
+      log =
+        capture_info(fn ->
+          assert get!(%{config | secret: "wrong-secret"}, "/apps/#{config.id}/channels").status ==
+                   401
+        end)
+
+      assert log =~ "API request rejected"
+      assert log =~ "app_id=#{config.id}"
+      assert log =~ "reason=invalid_signature"
+      refute log =~ config.secret
+    end
+
     test "an invalid signature is a 401", %{config: config} do
       body = Jason.encode!(%{name: "e", channel: "a", data: "x"})
       path = signed_path(config, "POST", "/apps/#{config.id}/events", body)
@@ -442,6 +457,19 @@ defmodule ArcWeb.ApiTest do
       statuses = for _ <- 1..4, do: get!(config, "/apps/#{config.id}/channels").status
       assert 429 in statuses
       assert Enum.take(statuses, 2) == [200, 200]
+    end
+  end
+
+  # The suite runs at log level :warning; these assertions need the info messages the
+  # doc requires for auth failures, so the level is raised just around the capture.
+  defp capture_info(fun) do
+    previous = Logger.level()
+    Logger.configure(level: :info)
+
+    try do
+      capture_log(fun)
+    after
+      Logger.configure(level: previous)
     end
   end
 

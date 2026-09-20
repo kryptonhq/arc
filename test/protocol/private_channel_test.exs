@@ -1,6 +1,8 @@
 defmodule Arc.Protocol.PrivateChannelTest do
   use Arc.RealtimeCase
 
+  import ExUnit.CaptureLog
+
   alias Arc.Apps
   alias Arc.Channels.Channel
 
@@ -38,6 +40,21 @@ defmodule Arc.Protocol.PrivateChannelTest do
     {:ok, channel} = Channel.parse("private-orders")
     Arc.Realtime.publish(config, [channel], "created", "{}")
     refute_frame(client)
+  end
+
+  test "rejected subscriptions are logged at info, without the signature", %{config: config} do
+    {client, _socket_id} = connect!(config)
+
+    log =
+      capture_info(fn ->
+        subscribe!(client, "private-logged", %{auth: "#{config.key}:deadbeef"})
+        assert %{"status" => 401} = decode_data(next_frame!(client))
+      end)
+
+    assert log =~ "subscription rejected"
+    assert log =~ "app_id=#{config.id}"
+    assert log =~ "status=401"
+    refute log =~ "deadbeef"
   end
 
   test "a signature for another socket is rejected", %{config: config} do
@@ -81,5 +98,18 @@ defmodule Arc.Protocol.PrivateChannelTest do
     subscribe_auth!(client, config, socket_id, "private-cache-a")
     assert %{"event" => "pusher_internal:subscription_succeeded"} = next_frame!(client)
     assert %{"event" => "pusher:cache_miss", "channel" => "private-cache-a"} = next_frame!(client)
+  end
+
+  # The suite runs at log level :warning; these assertions need the info messages the
+  # doc requires for auth failures, so the level is raised just around the capture.
+  defp capture_info(fun) do
+    previous = Logger.level()
+    Logger.configure(level: :info)
+
+    try do
+      capture_log(fun)
+    after
+      Logger.configure(level: previous)
+    end
   end
 end
