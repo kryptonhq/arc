@@ -255,7 +255,9 @@ jobs:
           set -e
           curl -fsS http://localhost:4000/health/live > /dev/null
           curl -fsS http://localhost:4000/health/ready > /dev/null
-          curl -fsS http://localhost:4000/metrics | grep -q arc_connections_active
+          # The stack sets ARC_METRICS_AUTH_TOKEN, so an unauthenticated scrape is 401.
+          curl -fsS -o /dev/null -w '%{http_code}' http://localhost:4000/metrics | grep -q 401
+          curl -fsS -H "Authorization: Bearer dev-only-metrics-token" http://localhost:4000/metrics | grep -q arc_connections_active
           # The seeded demo app exists and the Next.js demo renders against it.
           curl -fsS http://localhost:3000/ | grep -q "Arc demo"
           # Unauthenticated dashboard requests start the OIDC flow.
