@@ -31,7 +31,13 @@ defmodule Arc.ClusterTest do
     %{node2: node2, node3: node3}
   end
 
-  setup do
+  setup %{node2: node2, node3: node3} do
+    # A test that cuts the cluster leaves it cut; reconnect before the next one so a
+    # single failure does not cascade into the rest of the suite.
+    for node <- [node2, node3], do: Node.connect(node)
+    :erpc.call(node2, Node, :connect, [node3])
+    eventually(fn -> node2 in Node.list() and node3 in Node.list() end)
+
     {app, config} = app_config_fixture(%{"client_events_enabled" => true})
     on_exit(fn -> Arc.Apps.delete_app(app) end)
     # The config reaches the peers over the cache broadcast.
@@ -107,6 +113,14 @@ defmodule Arc.ClusterTest do
     node2: node2,
     node3: node3
   } do
+    unless Cluster.partition_safe?() do
+      raise """
+      This test cuts the cluster in half. OTP's overlapping-partition protection would
+      answer that by disconnecting nodes that were not part of the partition, so the VM
+      has to start with it off: run the suite with `mix test.cluster`.
+      """
+    end
+
     join = fn port, user ->
       {client, socket_id} = connect!(config, "protocol=7", port)
 

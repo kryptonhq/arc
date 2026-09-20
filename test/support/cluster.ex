@@ -4,6 +4,14 @@ defmodule Arc.Test.Cluster do
   WebSocket endpoint on its own port.
   """
 
+  @doc """
+  True when this VM was started with partition policing disabled, which the partition
+  test needs. `mix test.cluster` starts it that way.
+  """
+  def partition_safe? do
+    :application.get_env(:kernel, :prevent_overlapping_partitions) == {:ok, false}
+  end
+
   @doc "Makes the test node distributed. Idempotent."
   def ensure_distributed do
     unless Node.alive?() do
@@ -24,7 +32,15 @@ defmodule Arc.Test.Cluster do
         # Control the peer over stdio, not distribution, so partition tests can cut
         # the distribution link without the peer shutting itself down.
         connection: :standard_io,
-        args: [~c"-setcookie", Atom.to_charlist(Node.get_cookie())]
+        args: [
+          ~c"-setcookie",
+          Atom.to_charlist(Node.get_cookie()),
+          # Without this, OTP's protection against overlapping partitions responds to
+          # the partition test by disconnecting nodes that were not part of it.
+          ~c"-kernel",
+          ~c"prevent_overlapping_partitions",
+          ~c"false"
+        ]
       })
 
     true = Node.connect(node)

@@ -95,6 +95,16 @@ defmodule Arc.MixProject do
     ]
   end
 
+  defp cluster_tests(args) do
+    {_, status} =
+      System.cmd("mix", ["test", "--only", "cluster" | args],
+        env: [{"ELIXIR_ERL_OPTIONS", "-kernel prevent_overlapping_partitions false"}],
+        into: IO.stream(:stdio, :line)
+      )
+
+    if status != 0, do: exit({:shutdown, status})
+  end
+
   # Aliases are shortcuts or tasks specific to the current project.
   # For example, to install project dependencies and perform other setup tasks, run:
   #
@@ -114,7 +124,10 @@ defmodule Arc.MixProject do
         "esbuild arc --minify",
         "phx.digest"
       ],
-      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
+      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"],
+      # Cluster tests simulate a netsplit, so the VM must not police overlapping
+      # partitions; that can only be set when the VM starts.
+      "test.cluster": &cluster_tests/1
     ]
   end
 end

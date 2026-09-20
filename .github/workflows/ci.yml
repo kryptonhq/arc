@@ -81,7 +81,7 @@ jobs:
           elixir-version: ${{ env.ELIXIR_VERSION }}
           otp-version: ${{ env.OTP_VERSION }}
       - run: mix deps.get
-      - run: mix test --only cluster
+      - run: mix test.cluster
 
   integration:
     name: Real SDKs (JavaScript client, Python server)

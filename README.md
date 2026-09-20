@@ -369,7 +369,7 @@ Tests:
 ```bash
 mix test                          # unit, property, protocol conformance, failure tests
 mix coveralls                     # the same, failing below 90% coverage
-mix test --only cluster           # three-node cluster
+mix test.cluster                  # three-node cluster (starts the VM with partition policing off)
 test/integration/run.sh           # real client (JavaScript) and server (Python) SDKs
 ```
 
