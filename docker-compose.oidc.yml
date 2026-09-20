@@ -1,0 +1,15 @@
+# Adds Keycloak-backed sign-in to the local stack, the way production is deployed:
+#
+#   docker compose --profile oidc -f docker-compose.yml -f docker-compose.oidc.yml up --build
+#
+# Sign in as admin / admin. A second user, outsider / outsider, shows what a signed-in
+# user who is not on the admin allowlist sees. The password form stays available too.
+services:
+  arc:
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      ARC_OIDC_ISSUER: http://keycloak.localhost:8180/realms/arc
+      ARC_OIDC_CLIENT_ID: arc-dashboard
+      ARC_OIDC_CLIENT_SECRET: arc-dashboard-dev-secret

@@ -28,9 +28,22 @@ defmodule Arc.Admin.OIDC do
   def exchange(code, redirect_uri, flow), do: adapter().exchange(code, redirect_uri, flow)
   def logout_url(redirect_uri), do: adapter().logout_url(redirect_uri)
 
+  @doc """
+  True when an identity provider is configured. It is optional once
+  `ARC_ADMIN_PASSWORD` is set; without it the dashboard offers the password form only.
+  """
+  def configured? do
+    case Application.get_env(:arc, :oidc, [])[:issuer] do
+      issuer when is_binary(issuer) and issuer != "" -> true
+      _ -> false
+    end
+  end
+
   @doc "Child specs for the adapter's own processes, if it has any."
   def child_specs do
-    if function_exported?(adapter(), :child_specs, 0), do: adapter().child_specs(), else: []
+    if configured?() and function_exported?(adapter(), :child_specs, 0),
+      do: adapter().child_specs(),
+      else: []
   end
 
   defp adapter, do: Application.get_env(:arc, :oidc_adapter, Arc.Admin.OIDC.Oidcc)

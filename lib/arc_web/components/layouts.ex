@@ -29,6 +29,13 @@ defmodule ArcWeb.Layouts do
       <.rail active={@active} current_admin={@current_admin} stats={@stats} />
 
       <div class="min-w-0">
+        <p
+          :if={Arc.Admin.password_enabled?()}
+          class="border-b border-amber-200 bg-amber-50 px-6 py-1.5 text-xs text-amber-900"
+        >
+          Password sign-in is enabled. Use an identity provider for shared or production
+          installations.
+        </p>
         {render_slot(@inner_block)}
       </div>
     </div>

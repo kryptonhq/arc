@@ -3,18 +3,30 @@ title: Dashboard
 description: What operators can see and change, and who is allowed in.
 ---
 
-The dashboard is served by Arc itself at `/admin`, behind your identity provider.
+The dashboard is served by Arc itself at `/admin`, behind your identity provider or a
+password.
 
 ## Who gets in
 
-Sign-in is OpenID Connect with PKCE. There is one role: an administrator is an identity
-whose provider says the email is verified and whose address appears in
-`ARC_ADMIN_EMAILS`. The allowlist is re-checked on every request, so removing someone
-revokes their access at once, and sessions last 12 hours.
+There is one role, and two ways to get it.
 
-Arc keeps only the subject and email in the session — no tokens, because it calls nothing
-on the administrator's behalf. Someone who signs in but is not on the list gets a page
-that says so, rather than a blank screen.
+**An identity provider**, the default and the right choice for anything shared. Sign-in
+is OpenID Connect with PKCE. An administrator is an identity whose provider says the
+email is verified and whose address appears in `ARC_ADMIN_EMAILS`. The allowlist is
+re-checked on every request, so removing someone revokes their access at once.
+
+**A password**, when `ARC_ADMIN_PASSWORD` is set (at least 12 characters). The sign-in
+page then shows a password form, and the identity-provider variables become optional.
+The password signs in a single administrator: the first address in `ARC_ADMIN_EMAILS`,
+or `admin@localhost` when there is none. Attempts are limited to five per minute per
+client address, every failure is logged with that address and never with the value, and
+the dashboard shows a one-line notice while the mode is on. Both may be set at once,
+which keeps a way in when the provider is down.
+
+Either way, sessions last 12 hours and Arc keeps only the subject and email in the
+session: no tokens, because it calls nothing on the administrator's behalf. Someone who
+signs in but is not on the list gets a page that says so, rather than a blank screen.
+Rotating `SECRET_KEY_BASE` ends every session; changing the password does not.
 
 ## What it shows
 
