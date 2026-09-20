@@ -118,12 +118,20 @@ defmodule Arc.ClusterStackTest do
 
   # The test client does not answer server pings on its own; over a wait longer than
   # the activity timeout plus the pong window (150 s) Arc would rightly close it.
+  # A client that has meanwhile been closed is skipped; the test decides what a close
+  # means, not the keepalive.
   defp keep_alive(clients) do
     pid =
-      spawn_link(fn ->
+      spawn(fn ->
         Stream.interval(20_000)
         |> Enum.each(fn _ ->
-          Enum.each(clients, &WsClient.send_json(&1, %{event: "pusher:ping", data: %{}}))
+          for client <- clients, Process.alive?(client) do
+            try do
+              WsClient.send_json(client, %{event: "pusher:ping", data: %{}})
+            catch
+              :exit, _ -> :ok
+            end
+          end
         end)
       end)
 
