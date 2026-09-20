@@ -2,6 +2,7 @@ import { RootProvider } from 'fumadocs-ui/provider/next';
 import './global.css';
 import { IBM_Plex_Mono, IBM_Plex_Sans } from 'next/font/google';
 import type { Metadata } from 'next';
+import { SiteFooter } from '@/components/footer';
 
 // The same pair the dashboard uses: Plex Sans for prose, Plex Mono for anything a
 // machine produced — keys, channel names, code.
@@ -34,7 +35,10 @@ export default function Layout({ children }: LayoutProps<'/'>) {
       suppressHydrationWarning
     >
       <body className="flex flex-col min-h-screen">
-        <RootProvider>{children}</RootProvider>
+        <RootProvider>
+          {children}
+          <SiteFooter />
+        </RootProvider>
       </body>
     </html>
   );
