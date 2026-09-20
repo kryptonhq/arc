@@ -11,7 +11,50 @@ env:
   OTP_VERSION: "27.3"
 
 jobs:
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    outputs:
+      server: ${{ steps.filter.outputs.server }}
+      docs: ${{ steps.filter.outputs.docs }}
+      demo: ${{ steps.filter.outputs.demo }}
+      packaging: ${{ steps.filter.outputs.packaging }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            server:
+              - 'lib/**'
+              - 'test/**'
+              - 'config/**'
+              - 'priv/**'
+              - 'mix.exs'
+              - 'mix.lock'
+              - 'coveralls.json'
+              - '.github/workflows/ci.yml'
+            docs:
+              - 'website/**'
+              - '.github/workflows/ci.yml'
+            demo:
+              - 'examples/nextjs-demo/**'
+              - '.github/workflows/ci.yml'
+            packaging:
+              - 'Dockerfile'
+              - '.dockerignore'
+              - 'docker-compose.yml'
+              - 'docker/**'
+              - 'rel/**'
+              - 'lib/**'
+              - 'config/**'
+              - 'mix.exs'
+              - 'mix.lock'
+              - 'examples/nextjs-demo/**'
+              - '.github/workflows/ci.yml'
   test:
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
     name: Unit, property, protocol, failure
     runs-on: ubuntu-latest
     services:
@@ -73,6 +116,8 @@ jobs:
           fail_ci_if_error: true
 
   cluster:
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
     name: Cluster (three nodes)
     runs-on: ubuntu-latest
     services:
@@ -94,6 +139,8 @@ jobs:
       - run: mix test.cluster
 
   integration:
+    needs: changes
+    if: needs.changes.outputs.server == 'true' || needs.changes.outputs.demo == 'true'
     name: Real SDKs (JavaScript client, Python server)
     runs-on: ubuntu-latest
     env:
@@ -141,6 +188,8 @@ jobs:
           fail-on-severity: high
 
   docs:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
     name: Documentation site builds
     runs-on: ubuntu-latest
     defaults:
@@ -157,6 +206,8 @@ jobs:
       - run: npm run build
 
   stack:
+    needs: changes
+    if: needs.changes.outputs.packaging == 'true'
     name: Compose stack boots
     runs-on: ubuntu-latest
     steps:
