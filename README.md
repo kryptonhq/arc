@@ -4,6 +4,7 @@
 [![codecov](https://codecov.io/gh/kryptonhq/arc/branch/main/graph/badge.svg)](https://codecov.io/gh/kryptonhq/arc)
 [![Docker Hub](https://img.shields.io/docker/v/kryptonhq/arc?label=docker&sort=semver)](https://hub.docker.com/r/kryptonhq/arc)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![FOSSA Status](https://app.fossa.com/api/projects/custom%2B19630%2Fgithub.com%2Fkryptonhq%2Farc.svg?type=shield&issueType=license)](https://app.fossa.com/projects/custom%2B19630%2Fgithub.com%2Fkryptonhq%2Farc?ref=badge_shield&issueType=license)
 
 Arc is a self-hosted realtime messaging server: persistent WebSocket connections,
 channel-based pub/sub, presence, and a signed HTTP API that application backends call
