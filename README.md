@@ -24,6 +24,7 @@ follow; until then, the existing ones are the supported clients.
 - [Webhooks](#webhooks)
 - [Operations](#operations)
 - [Development](#development)
+- [License](#license)
 
 ## Quick start
 
@@ -341,3 +342,7 @@ test/integration/run.sh           # real client (JavaScript) and server (Python)
 ```
 
 Load tests live in [`loadtest/`](loadtest/README.md).
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
