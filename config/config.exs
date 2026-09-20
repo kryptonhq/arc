@@ -45,6 +45,9 @@ config :arc, Arc.Health, db_check_interval: 5_000
 # shutdown, so the load balancer stops routing here first.
 config :arc, :drain_seconds, 5
 
+# Dashboard password sign-in (ARC_ADMIN_PASSWORD). nil: OIDC only.
+config :arc, :admin_password, nil
+
 # CIDRs whose X-Forwarded-For header is believed. Empty: the header is ignored.
 config :arc, :trusted_proxies, []
 

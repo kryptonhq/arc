@@ -104,6 +104,25 @@ config :arc,
 
 config :arc, :metrics_auth_token, System.get_env("ARC_METRICS_AUTH_TOKEN")
 
+# Password sign-in for the dashboard. Optional in every environment; when set, the
+# OIDC variables become optional too. See ArcWeb.AuthController.
+admin_password =
+  case System.get_env("ARC_ADMIN_PASSWORD") do
+    nil ->
+      nil
+
+    "" ->
+      nil
+
+    value when byte_size(value) < 12 ->
+      raise "ARC_ADMIN_PASSWORD must be at least 12 characters"
+
+    value ->
+      value
+  end
+
+config :arc, :admin_password, admin_password
+
 config :arc, :drain_seconds, optional_int.("ARC_DRAIN_SECONDS", 5)
 
 config :arc,
@@ -130,10 +149,22 @@ if config_env() == :prod do
   database_url = required.("DATABASE_URL")
   secret_key_base = required.("SECRET_KEY_BASE")
   host = required.("PHX_HOST")
-  oidc_issuer = required.("ARC_OIDC_ISSUER")
-  oidc_client_id = required.("ARC_OIDC_CLIENT_ID")
-  oidc_client_secret = required.("ARC_OIDC_CLIENT_SECRET")
-  admin_emails = required.("ARC_ADMIN_EMAILS")
+
+  # With a password configured the identity provider is optional; without one it is
+  # the only way in, so all three variables are required.
+  oidc_required = if admin_password, do: fn name -> System.get_env(name) end, else: required
+  oidc_issuer = oidc_required.("ARC_OIDC_ISSUER")
+  oidc_client_id = oidc_required.("ARC_OIDC_CLIENT_ID")
+  oidc_client_secret = oidc_required.("ARC_OIDC_CLIENT_SECRET")
+
+  if oidc_issuer && (oidc_client_id in [nil, ""] or oidc_client_secret in [nil, ""]) do
+    raise "ARC_OIDC_ISSUER is set, so ARC_OIDC_CLIENT_ID and ARC_OIDC_CLIENT_SECRET are required too"
+  end
+
+  admin_emails =
+    if admin_password,
+      do: System.get_env("ARC_ADMIN_EMAILS", ""),
+      else: required.("ARC_ADMIN_EMAILS")
 
   if byte_size(secret_key_base) < 64 do
     raise "SECRET_KEY_BASE must be at least 64 bytes. Generate one with `mix arc.gen.keys`."

@@ -66,6 +66,8 @@ defmodule ArcWeb.Router do
     pipe_through :browser
 
     get "/login", AuthController, :login
+    get "/oidc", AuthController, :oidc
+    post "/password", AuthController, :password
     get "/callback", AuthController, :callback
     get "/logout", AuthController, :logout
   end

@@ -15,10 +15,10 @@ refuses to boot and names the variable, rather than failing later on a `nil`.
 | `SECRET_KEY_BASE` | Signs dashboard sessions and cookies (64 bytes) |
 | `ARC_ENCRYPTION_KEY` | 32 bytes, base64. Encrypts secrets at rest |
 | `PHX_HOST` | Public hostname, used in generated URLs and credential snippets |
-| `ARC_OIDC_ISSUER` | e.g. `https://keycloak.example.com/realms/arc` |
-| `ARC_OIDC_CLIENT_ID` | Confidential client registered with your provider |
-| `ARC_OIDC_CLIENT_SECRET` | That client's secret |
-| `ARC_ADMIN_EMAILS` | Comma-separated allowlist of dashboard administrators |
+| `ARC_OIDC_ISSUER` | e.g. `https://keycloak.example.com/realms/arc`. Optional once `ARC_ADMIN_PASSWORD` is set |
+| `ARC_OIDC_CLIENT_ID` | Confidential client registered with your provider. Required with the issuer |
+| `ARC_OIDC_CLIENT_SECRET` | That client's secret. Required with the issuer |
+| `ARC_ADMIN_EMAILS` | Comma-separated allowlist of dashboard administrators. Optional once `ARC_ADMIN_PASSWORD` is set |
 
 <Callout type="warn" title="Keep ARC_ENCRYPTION_KEY safe and backed up">
   It encrypts every app secret, encryption master key and webhook secret in the
@@ -57,6 +57,7 @@ was interrupted can be finished later.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
+| `ARC_ADMIN_PASSWORD` | — | Password sign-in for the dashboard, at least 12 characters. See [dashboard](/docs/operations/dashboard#who-gets-in) |
 | `PORT` | `4000` | Listen port |
 | `PHX_PUBLIC_PORT` | `443` | Port shown in snippets and generated URLs |
 | `PHX_PUBLIC_SCHEME` | `https` | Scheme for the same. With `http` the dashboard cookie loses its `Secure` flag |

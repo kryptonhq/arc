@@ -1,14 +1,19 @@
-# Local stack: Arc + Postgres + Keycloak, pre-configured, plus a Next.js demo app.
+# Local stack: Arc + Postgres, plus a Next.js demo app.
 #
 #   docker compose up --build
 #
-# Then open http://localhost:4000 (dashboard, sign in as admin / admin) and
+# Then open http://localhost:4000 (dashboard, password "arc-dev-password") and
 # http://localhost:3000 (the demo; open it in two windows).
 #
-# Keycloak is addressed as http://keycloak.localhost:8180 by both the browser and the
-# Arc container (browsers resolve *.localhost to 127.0.0.1; inside the compose network
-# the name is an alias of the Keycloak container), so the token issuer matches on both
-# sides. If your browser does not resolve *.localhost, add
+# To sign in through an identity provider instead, as production does, add the
+# Keycloak profile and override:
+#
+#   docker compose --profile oidc -f docker-compose.yml -f docker-compose.oidc.yml up --build
+#
+# Keycloak is then addressed as http://keycloak.localhost:8180 by both the browser and
+# the Arc container (browsers resolve *.localhost to 127.0.0.1; inside the compose
+# network the name is an alias of the Keycloak container), so the token issuer matches
+# on both sides. If your browser does not resolve *.localhost, add
 # "127.0.0.1 keycloak.localhost" to /etc/hosts.
 #
 # Postgres is published on 5442 so `mix test` and `mix phx.server` can use it too.
@@ -30,6 +35,7 @@ services:
       retries: 30
 
   keycloak:
+    profiles: [oidc]
     image: quay.io/keycloak/keycloak:26.0
     command: ["start-dev", "--import-realm"]
     environment:
@@ -71,9 +77,8 @@ services:
       PHX_PUBLIC_PORT: "4000"
       PHX_PUBLIC_SCHEME: http
       PORT: "4000"
-      ARC_OIDC_ISSUER: http://keycloak.localhost:8180/realms/arc
-      ARC_OIDC_CLIENT_ID: arc-dashboard
-      ARC_OIDC_CLIENT_SECRET: arc-dashboard-dev-secret
+      # Dashboard sign-in. The OIDC override file adds an identity provider.
+      ARC_ADMIN_PASSWORD: arc-dev-password
       ARC_ADMIN_EMAILS: admin@example.com
       # /metrics is public without this; the stack sets one so scraping is the same
       # shape as production.
@@ -97,8 +102,6 @@ services:
     depends_on:
       arc-seed:
         condition: service_completed_successfully
-      keycloak:
-        condition: service_healthy
     environment: *arc-env
     # Longer than ARC_DRAIN_SECONDS (default 5) plus closing connections, so a
     # `docker compose stop` drains instead of being killed mid-drain.

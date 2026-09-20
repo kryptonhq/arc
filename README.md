@@ -42,13 +42,21 @@ follow; until then, the existing ones are the supported clients.
 docker compose up --build
 ```
 
-This starts Arc on <http://localhost:4000>, Postgres, and a Keycloak realm that is
-already configured. Open <http://localhost:4000>, sign in as **admin / admin**, and
-create an app. The credentials page shows the app id, key, secret, host, and port,
-with snippets for a browser client and a Django `settings.py`.
+This starts Arc on <http://localhost:4000> and Postgres. Open <http://localhost:4000>,
+sign in with the password **arc-dev-password**, and create an app. The credentials page
+shows the app id, key, secret, host, and port, with snippets for a browser client and a
+Django `settings.py`.
 
-Keycloak is addressed as `http://keycloak.localhost:8180` by both your browser and the
-Arc container, so the token issuer is the same on both sides. Most browsers resolve
+Password sign-in is for trying Arc and for single-operator installs. Production
+deployments sign in through an identity provider; to run the stack that way, with a
+pre-configured Keycloak realm (sign in as **admin / admin**):
+
+```bash
+docker compose --profile oidc -f docker-compose.yml -f docker-compose.oidc.yml up --build
+```
+
+Keycloak is then addressed as `http://keycloak.localhost:8180` by both your browser and
+the Arc container, so the token issuer is the same on both sides. Most browsers resolve
 `*.localhost` to `127.0.0.1`; if yours does not, add `127.0.0.1 keycloak.localhost` to
 `/etc/hosts`.
 
@@ -57,8 +65,8 @@ channel type, client events, encryption, user sign-in, channel queries, and webh
 Open it in two browsers with different names. See
 [`examples/nextjs-demo`](examples/nextjs-demo/README.md).
 
-A second Keycloak user, **outsider / outsider**, exists to show what a signed-in user
-who is not on the admin allowlist sees (a 403 page).
+With the identity-provider profile, a second Keycloak user, **outsider / outsider**,
+shows what a signed-in user who is not on the admin allowlist sees (a 403 page).
 
 ## Configuration
 
@@ -74,10 +82,11 @@ variable, if a required one is missing.
 | `PORT` | No | Listen port, default `4000` |
 | `PHX_PUBLIC_PORT` | No | Public port shown in snippets and used in URLs, default `443` |
 | `PHX_PUBLIC_SCHEME` | No | `https` (default) or `http` |
-| `ARC_OIDC_ISSUER` | Yes | e.g. `https://keycloak.example.com/realms/arc` |
-| `ARC_OIDC_CLIENT_ID` | Yes | Confidential client registered in Keycloak |
-| `ARC_OIDC_CLIENT_SECRET` | Yes | That client's secret |
-| `ARC_ADMIN_EMAILS` | Yes | Comma-separated allowlist; anyone else gets 403 after sign-in |
+| `ARC_OIDC_ISSUER` | Unless `ARC_ADMIN_PASSWORD` is set | e.g. `https://keycloak.example.com/realms/arc` |
+| `ARC_OIDC_CLIENT_ID` | With the issuer | Confidential client registered in Keycloak |
+| `ARC_OIDC_CLIENT_SECRET` | With the issuer | That client's secret |
+| `ARC_ADMIN_EMAILS` | Unless `ARC_ADMIN_PASSWORD` is set | Comma-separated allowlist; anyone else gets 403 after sign-in |
+| `ARC_ADMIN_PASSWORD` | No | Dashboard password sign-in, at least 12 characters. Makes the identity provider optional |
 | `ARC_ENCRYPTION_KEY_RETIRED` | No | Previous keys, comma-separated, while rotating |
 | `ARC_TRUSTED_PROXIES` | No | CIDRs whose `X-Forwarded-For` is believed; unset, the header is ignored |
 | `ARC_DRAIN_SECONDS` | No | Seconds between readiness going 503 and clients being closed on shutdown, default `5` |
