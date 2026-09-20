@@ -1,0 +1,24 @@
+name: Docker Hub overview
+
+# Keeps the Docker Hub page in step with docker/hub-overview.md. Runs on its own so
+# the description can be corrected without rebuilding and republishing an image.
+on:
+  push:
+    branches: [main]
+    paths: ["docker/hub-overview.md", ".github/workflows/dockerhub-overview.yml"]
+  workflow_dispatch:
+
+jobs:
+  overview:
+    name: Update the description
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: kryptonhq/arc
+          short-description: "Self-hosted realtime messaging server speaking the Channels protocol v7"
+          readme-filepath: ./docker/hub-overview.md
+          enable-url-completion: true
