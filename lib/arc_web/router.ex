@@ -1,13 +1,31 @@
 defmodule ArcWeb.Router do
   use ArcWeb, :router
 
+  # The dashboard loads its own bundles and the IBM Plex fonts from Google, and talks to
+  # LiveView over a same-origin WebSocket. Nothing else, and never inline scripts.
+  @csp Enum.join(
+         [
+           "default-src 'self'",
+           "script-src 'self'",
+           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+           "font-src 'self' data: https://fonts.gstatic.com",
+           "img-src 'self' data:",
+           "connect-src 'self' ws: wss:",
+           "frame-ancestors 'none'",
+           "base-uri 'self'",
+           "form-action 'self'",
+           "object-src 'none'"
+         ],
+         "; "
+       )
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
     plug :fetch_live_flash
     plug :put_root_layout, html: {ArcWeb.Layouts, :root}
     plug :protect_from_forgery
-    plug :put_secure_browser_headers
+    plug :put_secure_browser_headers, %{"content-security-policy" => @csp}
   end
 
   pipeline :require_admin do
@@ -78,6 +96,7 @@ defmodule ArcWeb.Router do
     get "/apps/:app_id/webhooks/:id/edit", WebhookController, :edit
     put "/apps/:app_id/webhooks/:id", WebhookController, :update
     delete "/apps/:app_id/webhooks/:id", WebhookController, :delete
+    post "/apps/:app_id/webhooks/:id/retry", WebhookController, :retry
 
     get "/audit", AuditController, :index
   end

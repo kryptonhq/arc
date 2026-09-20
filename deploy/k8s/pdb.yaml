@@ -1,0 +1,11 @@
+# A voluntary disruption (node drain, cluster upgrade) never takes two nodes at once.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: arc
+  namespace: arc
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: arc

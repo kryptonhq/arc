@@ -1,0 +1,28 @@
+# Headless: libcluster's DNS strategy resolves it to every pod IP.
+apiVersion: v1
+kind: Service
+metadata:
+  name: arc-headless
+  namespace: arc
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: arc
+  ports:
+    - name: http
+      port: 4000
+---
+# What the Ingress routes to. Only ready pods receive traffic.
+apiVersion: v1
+kind: Service
+metadata:
+  name: arc
+  namespace: arc
+spec:
+  selector:
+    app: arc
+  ports:
+    - name: http
+      port: 80
+      targetPort: 4000

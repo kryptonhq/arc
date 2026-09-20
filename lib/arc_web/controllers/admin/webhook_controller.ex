@@ -70,6 +70,20 @@ defmodule ArcWeb.Admin.WebhookController do
     |> redirect(to: ~p"/admin/apps/#{app.id}/webhooks")
   end
 
+  @doc "Re-queues every failed delivery of an endpoint, e.g. after its receiver was down."
+  def retry(conn, %{"app_id" => app_id, "id" => id}) do
+    app = Apps.get_app!(app_id)
+    endpoint = Webhooks.get_endpoint!(app.id, id)
+    count = Webhooks.retry_failed(app.id, endpoint.id)
+
+    conn
+    |> put_flash(
+      :info,
+      "#{count} failed #{if count == 1, do: "delivery", else: "deliveries"} queued for retry."
+    )
+    |> redirect(to: ~p"/admin/apps/#{app.id}/webhooks")
+  end
+
   defp render_index(conn, app, changeset) do
     render(conn, :index,
       app: app,

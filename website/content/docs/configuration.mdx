@@ -23,7 +23,7 @@ refuses to boot and names the variable, rather than failing later on a `nil`.
 <Callout type="warn" title="Keep ARC_ENCRYPTION_KEY safe and backed up">
   It encrypts every app secret, encryption master key and webhook secret in the
   database. If it is lost, those secrets cannot be recovered and every app must be
-  issued new credentials.
+  issued new credentials. It can be rotated safely; see below.
 </Callout>
 
 Generate the two keys with:
@@ -32,19 +32,61 @@ Generate the two keys with:
 mix arc.gen.keys
 ```
 
+Values are validated at boot, not on first use: `SECRET_KEY_BASE` must be at least 64
+bytes, `ARC_ENCRYPTION_KEY` exactly 32 bytes of base64, `ARC_ADMIN_EMAILS` a list of
+email addresses, `PHX_PUBLIC_SCHEME` `http` or `https`, and every numeric variable an
+integer. A bad value fails the boot with the variable's name.
+
+### Rotating the encryption key
+
+1. Generate a new key with `mix arc.gen.keys`.
+2. Set it as `ARC_ENCRYPTION_KEY` and move the previous one to
+   `ARC_ENCRYPTION_KEY_RETIRED`. Restart every node; existing rows still decrypt.
+3. Re-encrypt every stored secret under the new key, once, from any node:
+
+   ```bash
+   bin/arc eval "Arc.Release.rewrap()"   # or: mix arc.rewrap
+   ```
+
+4. Remove `ARC_ENCRYPTION_KEY_RETIRED` and restart.
+
+`ARC_ENCRYPTION_KEY_RETIRED` accepts several keys separated by commas, so a rotation that
+was interrupted can be finished later.
+
 ## Optional
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `4000` | Listen port |
 | `PHX_PUBLIC_PORT` | `443` | Port shown in snippets and generated URLs |
-| `PHX_PUBLIC_SCHEME` | `https` | Scheme for the same |
+| `PHX_PUBLIC_SCHEME` | `https` | Scheme for the same. With `http` the dashboard cookie loses its `Secure` flag |
 | `POOL_SIZE` | `10` | Postgres connection pool |
+| `ARC_ENCRYPTION_KEY_RETIRED` | — | Previous encryption keys, comma-separated, during a rotation |
+| `ARC_TRUSTED_PROXIES` | none | CIDRs whose `X-Forwarded-For` is believed, e.g. `10.0.0.0/8,fd00::/8`. Unset: the header is ignored |
+| `ARC_DRAIN_SECONDS` | `5` | Wait between readiness turning 503 and clients being closed on shutdown |
 | `ARC_MAX_CONNECTIONS_PER_NODE` | unlimited | Safety ceiling per node |
-| `ARC_METRICS_AUTH_TOKEN` | — | If set, `/metrics` requires this bearer token |
+| `ARC_METRICS_AUTH_TOKEN` | — | If set, `/metrics` requires this bearer token. **Unset, `/metrics` is public** |
 | `ARC_CLUSTER_STRATEGY` | `none` | `none`, `gossip`, or `dns` |
 | `ARC_CLUSTER_DNS_QUERY` | — | Headless service name, required for `dns` |
 | `RELEASE_COOKIE` | — | Shared Erlang distribution cookie, required when clustered |
+
+### Limits and timing
+
+Every value is per node; see [clustering](/docs/operations/clustering) for what that
+means across a cluster.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ARC_CONNECT_RATE_PER_MINUTE` | `120` | WebSocket connection attempts per client address per minute (and burst). Over it: `429` with `Retry-After`, before the upgrade |
+| `ARC_SUBSCRIBE_RATE` | `20` | Subscribe attempts per connection per second. Over it: subscription error `RateLimited`, status 429 |
+| `ARC_AUTH_FAILURE_LIMIT` | `10` | Failed private/presence authorisations per connection per minute. Over it: close `4010`, do not reconnect |
+| `ARC_API_RATE` / `ARC_API_BURST` | `1000` / `2000` | HTTP API requests per app per second, sustained and burst. Over it: `429` |
+| `ARC_CLIENT_EVENT_RATE` | `10` | Client events per connection per second |
+| `ARC_ACTIVITY_TIMEOUT` | `120` | Seconds of silence before the server pings, advertised to clients |
+| `ARC_PONG_TIMEOUT_MS` | `30000` | How long to wait for the pong before closing with `4201` |
+| `ARC_MAX_QUEUE_LEN` | `5000` | Frames queued for one connection before it is closed as a slow consumer (`4102`) |
+| `ARC_MAX_FRAME_SIZE` | `262144` | Largest inbound WebSocket frame, bytes |
+| `ARC_CACHE_TTL_MS` | `1800000` | How long a cache channel keeps its last event |
 
 ## Per-app settings
 

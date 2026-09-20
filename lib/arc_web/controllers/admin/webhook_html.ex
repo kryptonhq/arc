@@ -43,6 +43,14 @@ defmodule ArcWeb.Admin.WebhookHTML do
                   </div>
                   <div class="flex shrink-0 gap-2">
                     <.btn
+                      href={~p"/admin/apps/#{@app.id}/webhooks/#{endpoint.id}/retry"}
+                      method="post"
+                      variant={:quiet}
+                      title="Queue every failed delivery to this endpoint again"
+                    >
+                      Retry failed
+                    </.btn>
+                    <.btn
                       href={~p"/admin/apps/#{@app.id}/webhooks/#{endpoint.id}/edit"}
                       variant={:quiet}
                     >

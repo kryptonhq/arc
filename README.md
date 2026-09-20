@@ -19,7 +19,8 @@ follow; until then, the existing ones are the supported clients.
 
 > **Keep `ARC_ENCRYPTION_KEY` safe and backed up.** It encrypts every app secret,
 > encryption master key, and webhook secret at rest. **If it is lost, those secrets
-> cannot be recovered and every app must be issued new credentials.**
+> cannot be recovered and every app must be issued new credentials.** It can be rotated
+> without loss: see [Rotating the encryption key](website/content/docs/configuration.mdx).
 
 ## Contents
 
@@ -77,12 +78,16 @@ variable, if a required one is missing.
 | `ARC_OIDC_CLIENT_ID` | Yes | Confidential client registered in Keycloak |
 | `ARC_OIDC_CLIENT_SECRET` | Yes | That client's secret |
 | `ARC_ADMIN_EMAILS` | Yes | Comma-separated allowlist; anyone else gets 403 after sign-in |
+| `ARC_ENCRYPTION_KEY_RETIRED` | No | Previous keys, comma-separated, while rotating |
+| `ARC_TRUSTED_PROXIES` | No | CIDRs whose `X-Forwarded-For` is believed; unset, the header is ignored |
+| `ARC_DRAIN_SECONDS` | No | Seconds between readiness going 503 and clients being closed on shutdown, default `5` |
 | `ARC_CLUSTER_STRATEGY` | No | `none` (default), `gossip`, or `dns` |
 | `ARC_CLUSTER_DNS_QUERY` | If `dns` | Headless service name, e.g. `arc-headless.default.svc.cluster.local` |
 | `RELEASE_COOKIE` | If clustered | Shared Erlang distribution cookie |
 | `ARC_METRICS_AUTH_TOKEN` | No | If set, `/metrics` requires `Authorization: Bearer <token>` |
 | `POOL_SIZE` | No | Postgres connection pool, default `10` |
 | `ARC_MAX_CONNECTIONS_PER_NODE` | No | Safety ceiling per node, default unlimited |
+| `ARC_CONNECT_RATE_PER_MINUTE`, `ARC_SUBSCRIBE_RATE`, `ARC_AUTH_FAILURE_LIMIT`, `ARC_API_RATE`, `ARC_API_BURST` | No | Abuse limits; see the configuration docs for defaults |
 
 Generate the two keys with:
 

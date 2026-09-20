@@ -7,7 +7,10 @@ defmodule Arc.Webhooks.Supervisor do
   @impl true
   def init(_opts) do
     children = [
-      {Task.Supervisor, name: Arc.Webhooks.TaskSupervisor},
+      {Task.Supervisor,
+       name: Arc.Webhooks.TaskSupervisor,
+       max_children:
+         Application.fetch_env!(:arc, Arc.Webhooks) |> Keyword.fetch!(:max_concurrency)},
       Arc.Webhooks.Batcher,
       Arc.Webhooks.Events,
       Arc.Webhooks.Scheduler

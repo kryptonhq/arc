@@ -48,6 +48,7 @@ defmodule Arc.Realtime.Socket do
   @impl true
   def init(%{key: key, params: params}) do
     with :ok <- check_protocol(params),
+         :ok <- check_draining(),
          :ok <- check_ready(),
          {:ok, app} <- fetch_app(key),
          :ok <- check_node_capacity(),
@@ -90,6 +91,12 @@ defmodule Arc.Realtime.Socket do
         {:error, :unsupported_protocol,
          "Unsupported protocol version: only protocol 7 is supported"}
     end
+  end
+
+  # A draining node closes with 4101 straight away so the SDK backs off and lands on
+  # another node, instead of being accepted and closed a moment later.
+  defp check_draining do
+    if Arc.Health.draining?(), do: {:error, :shutting_down}, else: :ok
   end
 
   defp check_ready do
@@ -175,7 +182,8 @@ defmodule Arc.Realtime.Socket do
   ## Subscribe
 
   defp subscribe(%{"channel" => name} = data, state) do
-    with {:ok, channel} <- parse_channel(name),
+    with :ok <- check_subscribe_rate(state),
+         {:ok, channel} <- parse_channel(name),
          :ok <- not_subscribed(channel, state),
          app when not is_nil(app) <- Cache.get(state.app_id),
          {:ok, member} <- authorize(channel, data, app, state),
@@ -196,6 +204,28 @@ defmodule Arc.Realtime.Socket do
         )
 
         frame = Protocol.subscription_error(name, type, message, status)
+
+        # A client that keeps failing authorisation is guessing signatures; close it
+        # with a do-not-reconnect code after the error frame.
+        case check_auth_failures(state, status) do
+          :ok -> {:push, {:text, frame}, state}
+          :too_many -> close(:too_many_auth_failures, state)
+        end
+
+      {:subscribe_rate_limited, retry_after_ms} ->
+        :telemetry.execute([:arc, :rate_limit, :hit], %{count: 1}, %{
+          app_id: state.app_id,
+          kind: "subscribe"
+        })
+
+        frame =
+          Protocol.subscription_error(
+            name,
+            "RateLimited",
+            "Too many subscription attempts; retry after #{retry_after_ms} ms",
+            429
+          )
+
         {:push, {:text, frame}, state}
 
       {:invalid_channel, message} ->
@@ -209,6 +239,36 @@ defmodule Arc.Realtime.Socket do
 
   defp subscribe(_data, state),
     do: push_error(:invalid_channel, "Subscribe requires a channel", state)
+
+  # Per connection: `subscribe_rate` attempts per second, with the same burst.
+  defp check_subscribe_rate(state) do
+    rate = config(:subscribe_rate)
+
+    case Arc.RateLimiter.take({:subscribe, state.socket_id}, rate, rate) do
+      :ok -> :ok
+      {:error, retry_after_ms} -> {:subscribe_rate_limited, retry_after_ms}
+    end
+  end
+
+  # Only authorisation failures (401/403) count; a malformed request (400) is a bug in
+  # the client, not an attack, and closing would hide it.
+  defp check_auth_failures(state, status) when status in [401, 403] do
+    limit = config(:auth_failure_limit)
+
+    case Arc.RateLimiter.take({:auth_failure, state.socket_id}, limit / 60, limit) do
+      :ok ->
+        :ok
+
+      {:error, _} ->
+        Logger.warning(
+          "closing connection after repeated auth failures app_id=#{state.app_id} socket_id=#{state.socket_id}"
+        )
+
+        :too_many
+    end
+  end
+
+  defp check_auth_failures(_state, _status), do: :ok
 
   defp parse_channel(name) do
     case Channel.parse(name) do
@@ -526,6 +586,8 @@ defmodule Arc.Realtime.Socket do
   def terminate(reason, state) do
     if state.socket_id do
       Logger.debug("connection closed socket_id=#{state.socket_id} reason=#{inspect(reason)}")
+      Arc.RateLimiter.reset({:subscribe, state.socket_id})
+      Arc.RateLimiter.reset({:auth_failure, state.socket_id})
     end
 
     :ok

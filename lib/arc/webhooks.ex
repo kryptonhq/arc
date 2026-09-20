@@ -80,6 +80,28 @@ defmodule Arc.Webhooks do
   defp maybe_endpoint(query, nil), do: query
   defp maybe_endpoint(query, id), do: where(query, [d], d.endpoint_id == ^id)
 
+  @doc """
+  Puts every failed delivery of an endpoint back in the queue with a fresh attempt
+  budget, e.g. after the receiving service was down longer than the retry schedule.
+  Returns the number of deliveries re-queued.
+  """
+  def retry_failed(app_id, endpoint_id) do
+    {count, _} =
+      from(d in Delivery,
+        where: d.app_id == ^app_id and d.endpoint_id == ^endpoint_id and d.status == "failed"
+      )
+      |> Repo.update_all(
+        set: [
+          status: "pending",
+          attempts: 0,
+          next_attempt_at: DateTime.utc_now(),
+          last_error: nil
+        ]
+      )
+
+    count
+  end
+
   @doc "Pending and in-flight deliveries across all apps."
   def queue_depth do
     Repo.aggregate(from(d in Delivery, where: d.status in ["pending", "in_flight"]), :count)

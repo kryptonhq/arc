@@ -305,6 +305,12 @@ defmodule ArcWeb.AdminTest do
       html = conn |> recycle() |> get(~p"/admin/apps/#{app.id}/webhooks") |> html_response(200)
       assert html =~ "https://example.com/hook"
       assert html =~ "HTTP 500"
+      assert html =~ "Retry failed"
+
+      retried = post(recycle(conn), ~p"/admin/apps/#{app.id}/webhooks/#{endpoint.id}/retry")
+      assert redirected_to(retried) == "/admin/apps/#{app.id}/webhooks"
+      assert Phoenix.Flash.get(retried.assigns.flash, :info) =~ "1 failed delivery queued"
+      assert [%{status: "pending", attempts: 0}] = Webhooks.list_deliveries(app.id)
 
       assert html_response(
                get(recycle(conn), ~p"/admin/apps/#{app.id}/webhooks/#{endpoint.id}/edit"),

@@ -27,20 +27,45 @@ config :arc, Arc.Realtime,
   # Maximum inbound WebSocket frame size in bytes.
   max_frame_size: 262_144,
   max_connections_per_node: nil,
-  # Per-app HTTP API token bucket: sustained requests per second and burst.
-  api_rate: 10_000,
-  api_burst: 20_000
+  # Per-app HTTP API token bucket: sustained requests per second and burst. Low enough
+  # to actually fire when a backend loops; raise it per deployment if you publish more.
+  api_rate: 1_000,
+  api_burst: 2_000,
+  # Per client address: WebSocket connection attempts per minute (and burst).
+  connect_rate_per_minute: 120,
+  # Per connection: subscribe attempts per second (and burst).
+  subscribe_rate: 20,
+  # Per connection: authorisation failures per minute before the connection is closed.
+  auth_failure_limit: 10
+
+# Readiness: how often the node confirms Postgres is reachable (ms).
+config :arc, Arc.Health, db_check_interval: 5_000
+
+# Seconds between readiness reporting 503 and client connections being closed on
+# shutdown, so the load balancer stops routing here first.
+config :arc, :drain_seconds, 5
+
+# CIDRs whose X-Forwarded-For header is believed. Empty: the header is ignored.
+config :arc, :trusted_proxies, []
+
+# The dashboard session cookie carries the Secure flag; runtime.exs turns it off only
+# for an install that is explicitly plain http.
+config :arc, :secure_cookies, true
 
 config :arc, Arc.Webhooks,
   # Events occurring within this window (ms) are sent in one request.
   batch_window: 250,
   # vacated / member_removed are held this long (ms) and cancelled if the channel refills.
   debounce_ms: 2_000,
-  # Seconds between attempts after a retryable failure; exhausted = failed.
-  retry_schedule: [1, 5, 30, 120, 600],
+  # Seconds between attempts after a retryable failure; exhausted = failed. The sum
+  # is a little over an hour, so an endpoint down for 30 minutes still gets everything.
+  retry_schedule: [1, 5, 30, 120, 600, 1_200, 1_800],
   request_timeout: 10_000,
   poll_interval: 1_000,
-  retention_days: 7
+  retention_days: 7,
+  # Deliveries in flight at once per node. Bounds the Postgres connections and
+  # outbound sockets a retry storm can hold.
+  max_concurrency: 20
 
 config :libcluster, topologies: []
 

@@ -104,7 +104,10 @@ jobs:
           import json, sys
           required = ["lib/arc/crypto.ex", "lib/arc/crypto/secret_box.ex", "lib/arc/channels/auth.ex",
                       "lib/arc/channels/channel.ex", "lib/arc_web/plugs/api_auth.ex", "lib/arc_web/admin_auth.ex",
-                      "lib/arc/realtime/protocol.ex", "lib/arc/realtime/socket.ex", "lib/arc/realtime/error_codes.ex"]
+                      "lib/arc/realtime/protocol.ex", "lib/arc/realtime/socket.ex", "lib/arc/realtime/error_codes.ex",
+                      "lib/arc/health.ex", "lib/arc/vault/cipher.ex", "lib/arc_web/plugs/client_ip.ex",
+                      "lib/arc_web/plugs/realtime_upgrade.ex", "lib/arc_web/plugs/session.ex",
+                      "lib/arc_web/controllers/health_controller.ex"]
           report = {f["name"]: f for f in json.load(open("cover/excoveralls.json"))["source_files"]}
           bad = False
           for name in required:

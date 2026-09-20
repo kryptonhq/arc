@@ -12,7 +12,11 @@ defmodule Arc.Realtime do
   alias Arc.Presence
   alias Arc.Realtime.{Dispatcher, Occupancy, Protocol, Registries}
 
-  @rpc_timeout 5_000
+  require Logger
+
+  # A wedged node must not hang the dashboard or the API; its counts are left out and
+  # the query answers with what the other nodes know.
+  @rpc_timeout 2_000
 
   @doc """
   Publishes one event to one or more channels. `data` is the event's string payload
@@ -69,7 +73,7 @@ defmodule Arc.Realtime do
   """
   def occupied_channels(app_id, prefix \\ nil) do
     [node() | Node.list()]
-    |> :erpc.multicall(Occupancy, :channels, [app_id], @rpc_timeout)
+    |> multicall(Occupancy, :channels, [app_id])
     |> Enum.flat_map(fn
       {:ok, channels} -> channels
       _ -> []
@@ -83,10 +87,20 @@ defmodule Arc.Realtime do
 
   defp sum_cluster(module, function, args) do
     [node() | Node.list()]
-    |> :erpc.multicall(module, function, args, @rpc_timeout)
+    |> multicall(module, function, args)
     |> Enum.reduce(0, fn
       {:ok, count}, acc when is_integer(count) -> acc + count
       _, acc -> acc
     end)
+  end
+
+  defp multicall(nodes, module, function, args) do
+    results = :erpc.multicall(nodes, module, function, args, @rpc_timeout)
+
+    for {node, {status, reason}} <- Enum.zip(nodes, results), status != :ok do
+      Logger.warning("cluster query #{function} skipped node=#{node} reason=#{inspect(reason)}")
+    end
+
+    results
   end
 end
