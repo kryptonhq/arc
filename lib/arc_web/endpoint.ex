@@ -1,19 +1,12 @@
 defmodule ArcWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :arc
 
-  # The session will be stored in the cookie and signed,
-  # this means its contents can be read but not tampered with.
-  # Set :encryption_salt if you would also like to encrypt it.
-  @session_options [
-    store: :cookie,
-    key: "_arc_key",
-    signing_salt: "PT+l6AYi",
-    same_site: "Lax",
-    # Dashboard sessions last 12 hours; ArcWeb.AdminAuth enforces the same limit
-    # server-side from the sign-in time.
-    max_age: 12 * 60 * 60,
-    http_only: true
-  ]
+  # The session is stored in a signed cookie; its options (including the Secure flag,
+  # which follows PHX_PUBLIC_SCHEME) are decided at boot in ArcWeb.Plugs.Session.
+  @session_options {ArcWeb.Plugs.Session, :options, []}
+
+  # The client's real address from a trusted proxy, before anything looks at it.
+  plug ArcWeb.Plugs.ClientIp
 
   # Client WebSocket connections: handled before anything else in the pipeline.
   plug ArcWeb.Plugs.RealtimeUpgrade
@@ -53,6 +46,6 @@ defmodule ArcWeb.Endpoint do
 
   plug Plug.MethodOverride
   plug Plug.Head
-  plug Plug.Session, @session_options
+  plug ArcWeb.Plugs.Session
   plug ArcWeb.Router
 end

@@ -75,6 +75,9 @@ services:
       ARC_OIDC_CLIENT_ID: arc-dashboard
       ARC_OIDC_CLIENT_SECRET: arc-dashboard-dev-secret
       ARC_ADMIN_EMAILS: admin@example.com
+      # /metrics is public without this; the stack sets one so scraping is the same
+      # shape as production.
+      ARC_METRICS_AUTH_TOKEN: dev-only-metrics-token
     volumes:
       - demo-credentials:/shared
     command:
@@ -97,6 +100,9 @@ services:
       keycloak:
         condition: service_healthy
     environment: *arc-env
+    # Longer than ARC_DRAIN_SECONDS (default 5) plus closing connections, so a
+    # `docker compose stop` drains instead of being killed mid-drain.
+    stop_grace_period: 30s
     ports:
       - "4000:4000"
     ulimits:

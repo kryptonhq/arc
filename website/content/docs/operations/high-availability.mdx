@@ -1,0 +1,125 @@
+---
+title: High availability
+description: The topology, the deploy sequence, what to watch, and what to do when something breaks.
+---
+
+This is the runbook for running Arc where a dropped connection is noticed: several
+nodes behind one load balancer, deploys that never close a client without telling it
+to reconnect, and a readiness signal the balancer can trust. It is sized for the low
+thousands of concurrent connections with headroom; measured ceilings live on the
+[load testing](/docs/operations/load-testing) page as they are published.
+
+## Topology
+
+```
+clients ──► load balancer (TLS, WebSocket upgrade, /health/ready) ──► arc-1
+                                                                  ├─► arc-2
+                                                                  └─► arc-3
+                                              all three ──► Postgres (managed, backed up)
+                                              dashboard  ──► identity provider
+```
+
+- **Three Arc nodes**, clustered with `ARC_CLUSTER_STRATEGY=dns` on Kubernetes or
+  `gossip` on a flat network, sharing `RELEASE_COOKIE`. Two is the minimum; three lets
+  one be rolled while another fails. Every node holds a full copy of presence, so
+  a node's death loses only its connections, which reconnect elsewhere.
+- **One load balancer** that forwards WebSocket upgrades, keeps idle connections open
+  longer than the 120 s activity timeout, health-checks `/health/ready` every few
+  seconds, and needs no sticky sessions: any node can serve any client, and a
+  publish on one node reaches subscribers on all of them.
+- **Managed Postgres** with automated backups. The data plane never needs it; the
+  dashboard, webhook persistence, and sign-in do.
+- **An identity provider** for the dashboard, or the password mode if it exists in
+  your version. If it is unreachable only sign-in is affected.
+
+Reference manifests for exactly this shape are in
+[`deploy/k8s`](https://github.com/kryptonhq/arc/tree/main/deploy/k8s).
+
+## Configuration that matters here
+
+| Variable | Set it to | Why |
+| --- | --- | --- |
+| `ARC_TRUSTED_PROXIES` | The load balancer's CIDR | Otherwise every client looks like the balancer and the per-address limit hits everyone at once |
+| `ARC_DRAIN_SECONDS` | Longer than the balancer's health-check interval × its failure threshold | So it stops routing before clients are closed |
+| Grace period | `ARC_DRAIN_SECONDS` + 20 s | `terminationGracePeriodSeconds` or `stop_grace_period`; shorter and the VM is killed mid-drain |
+| `ARC_MAX_CONNECTIONS_PER_NODE` | Well above the expected peak ÷ nodes | A ceiling for the day something loops, not a target |
+| `ARC_METRICS_AUTH_TOKEN` | A random value | `/metrics` is public without it |
+| `POOL_SIZE` | 10 per node is plenty | Webhook delivery is bounded to 20 concurrent per node, so it cannot exhaust the pool |
+| `ARC_ENCRYPTION_KEY` | Backed up somewhere that survives the cluster | Losing it loses every app secret |
+
+## Deploying without dropping anyone
+
+Arc drains on `SIGTERM`; see [shutting down](/docs/operations/deploying#shutting-down)
+for the sequence. On a rolling deploy, per node:
+
+1. The platform sends `SIGTERM`. Readiness turns `503 draining` at once and new
+   connections are refused with `4101`.
+2. `ARC_DRAIN_SECONDS` pass. The balancer's health check fails and it stops routing
+   to this node.
+3. Every connection is closed with `4101`. Client SDKs treat that as "reconnect after
+   backoff", reconnect through the balancer, and land on a node that is ready.
+4. The node stops. The new node starts, warms its app cache, and turns ready.
+
+Roll one node at a time (`maxUnavailable: 0`, `maxSurge: 1`) and wait for the new
+node's `/health/ready` before the next. A subscriber connected the whole time misses
+nothing: publishes go to every node and it never left one.
+
+Rehearse this the day before with a browser tab on the demo: you should see the
+connection drop and come back within the SDK's backoff, and the member list stay
+intact.
+
+## What to watch
+
+The [observability](/docs/operations/observability) page lists every metric. During
+an event these are the ones to have on a screen:
+
+| Metric | If it climbs, it means |
+| --- | --- |
+| `arc_connections_active` | Load. Compare with the ceiling per node |
+| `arc_messages_sent_total` rate | Fan-out volume; the thing that costs CPU |
+| `arc_broadcast_duration_seconds` p99 | A node is falling behind delivering; check run queue next |
+| `vm_total_run_queue_lengths_total` | Schedulers are saturated. Add a node before latency follows |
+| `arc_rate_limit_hits_total{kind="connect"}` | A client in a reconnect loop, or `ARC_TRUSTED_PROXIES` is wrong and every client shares one address |
+| `arc_auth_failures_total` | Bad signatures. A steady trickle is a misconfigured backend; a spike is someone guessing |
+| `arc_webhook_queue_depth` | Your webhook receiver is slow or down |
+| `arc_connections_total` rate | Churn. A spike with flat active connections is clients reconnecting in a loop |
+
+Close codes, from the [error reference](/docs/protocol/errors): a burst of `4101` is a
+deploy, `4102` is slow clients, `4100` is a node over capacity or still warming,
+`4010` is a client being cut off for repeated auth failures.
+
+## When something breaks
+
+| Failure | Clients see | Keeps working | Do | Recovered when |
+| --- | --- | --- | --- | --- |
+| A node dies | Its clients reconnect with backoff and land elsewhere | Everything, on the other nodes; presence removes the dead node's members within ~5 s | Nothing urgent. Replace it; check why | The node is back in `Node.list()` and ready |
+| Postgres unreachable | Nothing, unless they open the dashboard | Connections, subscribe, publish, presence, channel auth | Fix Postgres. Nodes report `503 database unreachable`; keep at least one in rotation by relaxing the balancer check if all of them do | `/health/ready` is 200 on every node |
+| Identity provider unreachable | Nothing; admins cannot sign in | Everything but the dashboard | Fix the provider. Existing dashboard sessions keep working for 12 h | Sign-in page loads |
+| Balancer health flapping | Reconnects | Everything | Check the balancer's timeout is above the probe's 2 s database check and that it targets `/health/ready`, not `/` | No `503` in the balancer log |
+| A client hammering auth | That client is closed with `4010` | Everything | Find the app and the client in logs (`client_ip`, `app_id`); fix or block upstream | `arc_auth_failures_total` flat |
+| A client in a reconnect loop | That address gets `429` | Everything | Same. If every client is affected, `ARC_TRUSTED_PROXIES` is wrong | `rate_limit_hits{kind="connect"}` flat |
+| Webhook receiver down | Nothing | Everything; deliveries retry for about an hour | Fix the receiver. Deliveries failed past the schedule can be re-queued from the endpoint's page | `arc_webhook_queue_depth` drains |
+
+## Secrets and backups
+
+- Back up `ARC_ENCRYPTION_KEY` before the first app is created. Rotation is supported
+  and documented under [configuration](/docs/configuration#rotating-the-encryption-key).
+- Rotating `SECRET_KEY_BASE` signs every dashboard session out. Harmless, but do it
+  before the event, not during.
+- Verify the Postgres backup restores. App credentials live there; without it and the
+  key, every app has to be re-issued.
+
+## The day before
+
+- [ ] `/health/ready` is 200 on every node and `Node.list()` on any node shows the others.
+- [ ] `ARC_TRUSTED_PROXIES` is right: a connection through the balancer logs the
+      client's address, not the balancer's.
+- [ ] Rolling restart rehearsed with a client connected; it reconnected within the
+      SDK's backoff and presence stayed intact.
+- [ ] Grace period on the platform is longer than `ARC_DRAIN_SECONDS` + 20 s.
+- [ ] Balancer idle timeout is above 120 s and it health-checks `/health/ready`.
+- [ ] `/metrics` needs the token, and the dashboard's numbers match the scrape.
+- [ ] Encryption key and Postgres backup exist somewhere outside the cluster.
+- [ ] The application backend signs API requests with a clock within a minute of
+      the nodes; a skewed clock is `401 timestamp`.
+- [ ] Someone can reach the dashboard, and the identity provider is up.

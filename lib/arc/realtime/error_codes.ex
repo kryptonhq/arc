@@ -26,6 +26,7 @@ defmodule Arc.Realtime.ErrorCodes do
     unsupported_protocol: {4007, "Unsupported protocol version"},
     no_protocol_version: {4008, "No protocol version supplied"},
     unauthorized: {4009, "Connection is unauthorized"},
+    too_many_auth_failures: {4010, "Too many failed subscription attempts"},
     # Reconnect after backoff.
     over_capacity: {4100, "Over capacity"},
     shutting_down: {4101, "Node is shutting down"},

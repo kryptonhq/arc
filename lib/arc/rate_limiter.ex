@@ -2,7 +2,8 @@ defmodule Arc.RateLimiter do
   @moduledoc """
   Node-local token buckets in ETS.
 
-  Used for the per-app HTTP API limit. Buckets are not coordinated across nodes, so a
+  Used for the per-app HTTP API limit, per-address connection attempts, and the
+  per-connection subscribe and auth-failure limits. Buckets are not coordinated across nodes, so a
   cluster-wide limit is approximate (up to N times the rate on N nodes). That is a
   deliberate trade: an exact global limiter would add a network hop to every publish.
   Concurrent callers on one node may also over-admit by a handful of requests; the
@@ -18,7 +19,7 @@ defmodule Arc.RateLimiter do
   Takes one token from bucket `key`, which refills at `rate` tokens per second up to
   `burst`. Returns `:ok` or `{:error, retry_after_ms}`.
   """
-  @spec take(term(), pos_integer(), pos_integer()) :: :ok | {:error, non_neg_integer()}
+  @spec take(term(), number(), number()) :: :ok | {:error, non_neg_integer()}
   def take(key, rate, burst) do
     now = System.monotonic_time(:millisecond)
 

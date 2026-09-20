@@ -65,6 +65,13 @@ defmodule Arc.Webhooks.Scheduler do
   end
 
   defp poll do
+    case Deliverer.free_slots() do
+      0 -> 0
+      slots -> claim(min(slots, @batch))
+    end
+  end
+
+  defp claim(limit) do
     safely("poll", fn ->
       now = DateTime.utc_now()
 
@@ -72,7 +79,7 @@ defmodule Arc.Webhooks.Scheduler do
         from(d in Delivery,
           where: d.status in ["pending", "in_flight"] and d.next_attempt_at <= ^now,
           order_by: [asc: d.next_attempt_at],
-          limit: @batch,
+          limit: ^limit,
           lock: "FOR UPDATE SKIP LOCKED",
           select: d.id
         )

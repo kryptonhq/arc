@@ -3,6 +3,8 @@ defmodule Arc.Application do
 
   use Application
 
+  require Logger
+
   @impl true
   def start(_type, _args) do
     children =
@@ -15,6 +17,7 @@ defmodule Arc.Application do
         {Phoenix.PubSub, name: Arc.PubSub},
         # Warmed before the endpoint starts so no handshake ever needs Postgres.
         Arc.Apps.Cache,
+        Arc.Health,
         Arc.RateLimiter,
         Arc.Realtime.Supervisor,
         Arc.Webhooks.Supervisor,
@@ -28,18 +31,44 @@ defmodule Arc.Application do
     Supervisor.start_link(children, strategy: :one_for_one, name: Arc.Supervisor)
   end
 
+  @doc """
+  Graceful shutdown, in the order a load balancer needs:
+
+  1. Readiness reports 503 so no new traffic is routed here.
+  2. Wait `drain_seconds` for the balancer's health check to notice.
+  3. Close every client connection with 4101 (reconnect after backoff) so clients
+     move to another node, and flush webhook batches that have not been persisted.
+
+  Only then does the supervision tree stop. The platform's stop grace period must be
+  longer than the drain window or the VM is killed mid-drain.
+  """
   @impl true
   def prep_stop(state) do
-    # Close client connections with a reconnect-after-backoff code so clients move to
-    # another node instead of treating the shutdown as a failure.
-    try do
-      Arc.Realtime.drain_node()
-    rescue
-      # The tree may already be gone if the application is stopping after a failure.
-      ArgumentError -> :ok
+    drain(Application.get_env(:arc, :drain_seconds, 5))
+    state
+  end
+
+  @doc false
+  def drain(seconds) do
+    Arc.Health.start_drain()
+
+    if seconds > 0 do
+      Logger.info("draining: waiting #{seconds}s for the load balancer before closing clients")
+      Process.sleep(seconds * 1000)
     end
 
-    state
+    safely(fn -> Arc.Realtime.drain_node() end)
+    safely(fn -> Arc.Webhooks.Batcher.flush_all() end)
+    :ok
+  end
+
+  # The tree may already be gone if the application is stopping after a failure.
+  defp safely(fun) do
+    fun.()
+  rescue
+    _ -> :ok
+  catch
+    :exit, _ -> :ok
   end
 
   @impl true

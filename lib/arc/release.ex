@@ -16,6 +16,22 @@ defmodule Arc.Release do
     :ok
   end
 
+  @doc """
+  Re-encrypts every secret at rest under the current `ARC_ENCRYPTION_KEY`, so a key
+  listed in `ARC_ENCRYPTION_KEY_RETIRED` can be dropped. Returns the number of rows
+  rewritten per table. Safe to run repeatedly. See `Arc.Vault.Cipher`.
+  """
+  @spec rewrap() :: [{String.t(), non_neg_integer()}]
+  def rewrap do
+    Application.ensure_all_started(@app)
+
+    for schema <- [Arc.Apps.App, Arc.Webhooks.Endpoint] do
+      count = Arc.Repo.aggregate(schema, :count)
+      :ok = Cloak.Ecto.Migrator.migrate(Arc.Repo, schema)
+      {schema.__schema__(:source), count}
+    end
+  end
+
   def rollback(repo, version) do
     load_app()
     {:ok, _, _} = Ecto.Migrator.with_repo(repo, &Ecto.Migrator.run(&1, :down, to: version))

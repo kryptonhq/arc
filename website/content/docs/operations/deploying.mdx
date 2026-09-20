@@ -44,16 +44,44 @@ location / {
 Raise the idle timeout: connections are meant to stay open, and a proxy that closes them
 after 60 seconds turns into a reconnect storm.
 
+Tell Arc which proxies to believe about the client's address, as CIDRs:
+
+```bash
+ARC_TRUSTED_PROXIES=10.0.0.0/8
+```
+
+Only then is `X-Forwarded-For` used: for the per-address connection limit and for the
+`client_ip` field in logs. Unset, every client appears to be the proxy, the header is
+ignored, and a client cannot forge its address.
+
+The dashboard's session cookie carries the `Secure` flag, so it is only sent over TLS.
+That is right behind a TLS-terminating proxy; for an install that is deliberately plain
+`http`, set `PHX_PUBLIC_SCHEME=http` and the flag is dropped. Every dashboard response
+also carries a Content-Security-Policy that permits Arc's own assets and the fonts it
+loads, and nothing else.
+
 ## Health checks
 
 | Path | Answers 200 when |
 | --- | --- |
 | `/health/live` | The VM is running |
-| `/health/ready` | Migrations are applied and the app cache is warm |
+| `/health/ready` | Migrations are applied, the app cache is warm, Postgres answered the last check, and the node is not draining |
 
 Point load balancers and Kubernetes readiness probes at `/health/ready`, so traffic waits
 until a node can actually serve it. Use `/health/live` for liveness only — restarting a
 node because it is still warming would be a loop.
+
+Readiness follows Postgres: every five seconds the node runs `SELECT 1` and caches the
+answer (probes never touch the database themselves). While Postgres is unreachable the
+node reports `503 database unreachable` so new traffic goes elsewhere. Connections it
+already holds keep working, because publishing, subscribing and channel authorisation
+never need the database; only the dashboard, webhook persistence and sign-in do.
+
+## Metrics
+
+`/metrics` is on the same listener as everything else. It is public unless
+`ARC_METRICS_AUTH_TOKEN` is set, in which case the scraper sends it as a bearer token.
+Set it in production: the endpoint reports per-app connection counts.
 
 ## File descriptors
 
@@ -68,6 +96,23 @@ ulimits:
 
 ## Shutting down
 
-On `SIGTERM`, Arc closes connections with a reconnect-after-backoff code, so clients move
-to another node instead of treating the shutdown as a failure. Give the container enough
-grace period for that to finish, and roll one node at a time.
+On `SIGTERM`, Arc drains in the order a load balancer needs:
+
+1. `/health/ready` turns `503 draining` at once, and new WebSocket connections are
+   refused with `4101`.
+2. It waits `ARC_DRAIN_SECONDS` (default 5) so the balancer's health check notices and
+   stops routing here.
+3. Every connection is closed with `4101` (reconnect after backoff), so clients move to
+   another node, and webhook events still in the batch window are persisted.
+
+Only then does the node stop. The platform's grace period must be longer than the drain
+window plus a few seconds, or the VM is killed mid-drain:
+
+```yaml
+# Kubernetes
+terminationGracePeriodSeconds: 30
+# Compose
+stop_grace_period: 30s
+```
+
+Roll one node at a time and wait for the new node's `/health/ready` before the next.

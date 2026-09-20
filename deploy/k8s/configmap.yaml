@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: arc-config
+  namespace: arc
+data:
+  PHX_HOST: "arc.example.com"
+  PHX_PUBLIC_PORT: "443"
+  PHX_PUBLIC_SCHEME: "https"
+  PORT: "4000"
+  POOL_SIZE: "10"
+  ARC_ADMIN_EMAILS: "you@example.com"
+  ARC_OIDC_ISSUER: "https://keycloak.example.com/realms/arc"
+  ARC_OIDC_CLIENT_ID: "arc-dashboard"
+  # Clustering over the headless service below.
+  ARC_CLUSTER_STRATEGY: "dns"
+  ARC_CLUSTER_DNS_QUERY: "arc-headless.arc.svc.cluster.local"
+  # The ingress controller's pod CIDR, so X-Forwarded-For is believed.
+  ARC_TRUSTED_PROXIES: "10.0.0.0/8"
+  # Readiness goes 503, then this many seconds pass before clients are closed.
+  ARC_DRAIN_SECONDS: "10"
+  # A ceiling well above the expected peak, so one node cannot be overrun.
+  ARC_MAX_CONNECTIONS_PER_NODE: "20000"

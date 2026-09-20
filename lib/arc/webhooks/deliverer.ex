@@ -14,6 +14,10 @@ defmodule Arc.Webhooks.Deliverer do
   Rows are claimed with a lease (`next_attempt_at` in the future while in flight), so a
   node that dies mid-request leaves a row that `Arc.Webhooks.Scheduler` retries once
   the lease expires.
+
+  At most `max_concurrency` attempts run at once per node. Beyond that, a new delivery
+  is recorded as pending and picked up by the scheduler when a slot frees, so a retry
+  storm cannot hold every Postgres connection or outbound socket.
   """
   require Logger
 
@@ -23,32 +27,76 @@ defmodule Arc.Webhooks.Deliverer do
 
   @lease_seconds 60
 
-  @doc "Records a new delivery and starts its first attempt."
+  @doc """
+  Records a new delivery and starts its first attempt. When every slot is busy the
+  row is left pending for the scheduler. Returns the task pid, or `{:ok, :queued}`.
+  """
   def enqueue(app_id, endpoint_id, payload) do
-    Task.Supervisor.start_child(Arc.Webhooks.TaskSupervisor, fn ->
-      try do
-        delivery =
-          Repo.insert!(%Delivery{
-            app_id: app_id,
-            endpoint_id: endpoint_id,
-            payload: payload,
-            status: "in_flight",
-            next_attempt_at: lease_until()
-          })
+    case start_task(fn -> record_and_attempt(app_id, endpoint_id, payload) end) do
+      {:ok, pid} ->
+        {:ok, pid}
 
-        attempt(delivery)
-      rescue
-        error ->
-          Logger.warning(
-            "webhook delivery could not be recorded app_id=#{app_id}: #{Exception.message(error)}"
-          )
-      end
-    end)
+      {:error, :max_children} ->
+        record(app_id, endpoint_id, payload, "pending", DateTime.utc_now())
+        {:ok, :queued}
+    end
   end
 
-  @doc "Starts an attempt for a delivery already claimed by the scheduler."
+  @doc """
+  Starts an attempt for a delivery already claimed by the scheduler. If no slot is
+  free the claim is released so the next poll picks the row up again.
+  """
   def start(%Delivery{} = delivery) do
-    Task.Supervisor.start_child(Arc.Webhooks.TaskSupervisor, fn -> attempt(delivery) end)
+    case start_task(fn -> attempt(delivery) end) do
+      {:ok, pid} ->
+        {:ok, pid}
+
+      {:error, :max_children} ->
+        release(delivery)
+        {:ok, :queued}
+    end
+  end
+
+  @doc "Attempts that can still be started on this node before `max_concurrency`."
+  def free_slots do
+    limit = Application.fetch_env!(:arc, Arc.Webhooks) |> Keyword.fetch!(:max_concurrency)
+    running = Arc.Webhooks.TaskSupervisor |> Task.Supervisor.children() |> length()
+    max(0, limit - running)
+  end
+
+  defp start_task(fun), do: Task.Supervisor.start_child(Arc.Webhooks.TaskSupervisor, fun)
+
+  defp record_and_attempt(app_id, endpoint_id, payload) do
+    case record(app_id, endpoint_id, payload, "in_flight", lease_until()) do
+      {:ok, delivery} -> attempt(delivery)
+      :error -> :ok
+    end
+  end
+
+  defp record(app_id, endpoint_id, payload, status, next_attempt_at) do
+    {:ok,
+     Repo.insert!(%Delivery{
+       app_id: app_id,
+       endpoint_id: endpoint_id,
+       payload: payload,
+       status: status,
+       next_attempt_at: next_attempt_at
+     })}
+  rescue
+    error ->
+      Logger.warning(
+        "webhook delivery could not be recorded app_id=#{app_id}: #{Exception.message(error)}"
+      )
+
+      :error
+  end
+
+  defp release(delivery) do
+    delivery
+    |> Ecto.Changeset.change(status: "pending", next_attempt_at: DateTime.utc_now())
+    |> Repo.update()
+  rescue
+    _ -> :error
   end
 
   @doc "The lease end for a newly claimed delivery."

@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: arc
+  namespace: arc
+  annotations:
+    # ingress-nginx: keep WebSockets open well past the 120 s activity timeout.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # No sticky sessions: any node can serve any client.
+    nginx.ingress.kubernetes.io/affinity: "none"
+    cert-manager.io/cluster-issuer: "letsencrypt"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [arc.example.com]
+      secretName: arc-tls
+  rules:
+    - host: arc.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: arc
+                port:
+                  number: 80

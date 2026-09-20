@@ -23,7 +23,15 @@ config :arc, ArcWeb.Endpoint,
 config :arc, Arc.Realtime,
   activity_timeout: 120,
   pong_timeout: 30_000,
-  idle_check_interval: 5_000
+  idle_check_interval: 5_000,
+  # Every test connects from one address; the limit is exercised by lowering it.
+  connect_rate_per_minute: 1_000_000
+
+# Tests drive the database check explicitly with Arc.Health.check_db_now/0.
+config :arc, Arc.Health, db_check_interval: nil
+
+# No waiting for a load balancer in tests.
+config :arc, :drain_seconds, 0
 
 # The dashboard's live numbers are driven by tests, not by the clock.
 config :arc, Arc.Metrics, interval: 60_000

@@ -21,13 +21,20 @@ Set a strategy and a shared cookie, and nodes find each other:
   seconds.
 - **App configuration.** Credential changes are published to every node, so a rotated
   secret stops verifying everywhere as soon as the dashboard returns.
-- **Channel queries.** Occupancy asks every node and sums the answers.
+- **Channel queries.** Occupancy asks every node and sums the answers. A node that does
+  not answer within two seconds is left out and logged, so a wedged node slows a query
+  but cannot hang the dashboard or the API.
 
 ## What stays local
 
 - **Rate limits.** Token buckets are per node, so a cluster-wide limit is approximate: N
   nodes allow up to N times the rate. That is deliberate — an exact global limiter would
-  put a coordination hop in the publish path.
+  put a coordination hop in the publish path. This applies to the API limit, the
+  per-address connection limit, and the per-connection subscribe and auth-failure
+  limits alike.
+- **Readiness.** Each node checks Postgres and drains on its own, so a rolling restart
+  takes one node out of the balancer at a time. See
+  [high availability](/docs/operations/high-availability) for the full sequence.
 - **Cache channel retention.** Each node keeps the last event it saw for a cache channel.
   A subscriber may get a cache miss on a node that has not seen the event yet.
 - **Metrics.** Each node reports its own numbers; the dashboard sums them.
