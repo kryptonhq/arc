@@ -5,7 +5,8 @@ icon: Signal
 ---
 
 Arc keeps WebSocket connections open, groups them into channels, tracks who is present,
-and gives your backend a signed HTTP API for publishing events to them.
+and gives your backend a signed HTTP API for publishing events to them. It runs on your
+own infrastructure, with Postgres for the handful of things that must survive a restart.
 
 It speaks the **Channels protocol, version 7**. Existing client SDKs for that protocol —
 JavaScript, iOS, Android, Flutter — and the Python server SDK used from Django work
