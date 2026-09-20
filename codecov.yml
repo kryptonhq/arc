@@ -22,12 +22,17 @@ coverage:
         # A refactor that moves a few covered lines around should not fail the build.
         threshold: 0.5%
         if_ci_failed: error
+        # A documentation-only change runs no tests and uploads nothing.
+        if_no_uploads: success
+        if_not_found: success
     patch:
       default:
         # New code carries its own tests. Dropping below this is how coverage rots.
         target: 85%
         threshold: 0%
         if_ci_failed: error
+        if_no_uploads: success
+        if_not_found: success
 
 comment:
   layout: "condensed_header, diff, flags, components, condensed_files"

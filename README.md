@@ -401,6 +401,11 @@ themselves when it is not:
 Both have free tiers for open-source projects. Add the secret in **Settings → Secrets
 and variables → Actions**, and the matching job starts working on the next run.
 
+Each job runs only when a change can affect it: a documentation edit does not start
+the cluster tests or build a container image, while anything touching `lib/` or
+`config/` runs everything. The jobs keep their names either way, so the checks a pull
+request must pass are the same set whichever path it takes.
+
 Pull requests also go through GitHub's dependency review, which fails on a dependency
 whose licence Arc cannot take on under Apache-2.0.
 
