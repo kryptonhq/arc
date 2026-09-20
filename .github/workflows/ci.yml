@@ -38,8 +38,9 @@ jobs:
       - run: mix deps.get
       - run: mix compile --warnings-as-errors
       - run: mix format --check-formatted
-      # Fails the build below 90% line coverage (coveralls.json).
-      - run: mix coveralls
+      # Runs the suite with coverage: fails below the floor in coveralls.json and
+      # writes cover/cobertura.xml for Codecov.
+      - run: mix coveralls.cobertura
       - name: Critical modules at 100%
         run: |
           mix coveralls.json > /dev/null
@@ -61,6 +62,15 @@ jobs:
           if bad:
               sys.exit("the modules above must stay at 100% line coverage")
           PY
+
+      - name: Send coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./cover/cobertura.xml
+          flags: unit
+          # A gate nobody can see is not a gate: a failed upload fails the job.
+          fail_ci_if_error: true
 
   cluster:
     name: Cluster (three nodes)

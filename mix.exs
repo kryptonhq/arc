@@ -44,7 +44,8 @@ defmodule Arc.MixProject do
         precommit: :test,
         coveralls: :test,
         "coveralls.html": :test,
-        "coveralls.json": :test
+        "coveralls.json": :test,
+        "coveralls.cobertura": :test
       ]
     ]
   end

@@ -1,5 +1,10 @@
 # Arc
 
+[![CI](https://github.com/kryptonhq/arc/actions/workflows/ci.yml/badge.svg)](https://github.com/kryptonhq/arc/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/kryptonhq/arc/branch/main/graph/badge.svg)](https://codecov.io/gh/kryptonhq/arc)
+[![Docker Hub](https://img.shields.io/docker/v/kryptonhq/arc?label=docker&sort=semver)](https://hub.docker.com/r/kryptonhq/arc)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 Arc is a self-hosted realtime messaging server: persistent WebSocket connections,
 channel-based pub/sub, presence, and a signed HTTP API that application backends call
 to publish events.
@@ -369,6 +374,7 @@ Tests:
 ```bash
 mix test                          # unit, property, protocol conformance, failure tests
 mix coveralls                     # the same, failing below 90% coverage
+mix coveralls.cobertura           # coverage as XML, which CI sends to Codecov
 mix test.cluster                  # three-node cluster (starts the VM with partition policing off)
 test/integration/run.sh           # real client (JavaScript) and server (Python) SDKs
 ```
