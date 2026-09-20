@@ -7,7 +7,10 @@ defmodule Arc.MixProject do
       version: "0.1.0",
       description: "Self-hosted realtime messaging server speaking the Channels protocol v7",
       source_url: "https://github.com/kryptonhq/arc",
-      package: [licenses: ["Apache-2.0"], links: %{"GitHub" => "https://github.com/kryptonhq/arc"}],
+      package: [
+        licenses: ["Apache-2.0"],
+        links: %{"GitHub" => "https://github.com/kryptonhq/arc"}
+      ],
       elixir: "~> 1.18",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,

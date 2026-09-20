@@ -23,6 +23,7 @@ follow; until then, the existing ones are the supported clients.
 - [HTTP API](#http-api)
 - [Webhooks](#webhooks)
 - [Operations](#operations)
+- [Releases](#releases)
 - [Development](#development)
 - [License](#license)
 
@@ -323,6 +324,35 @@ bin/arc rpc 'IO.puts(Jason.encode!(Arc.Release.create_app("Chat")))'
 
 **Logs** are JSON in production. Auth failures are logged at info with the app id and
 reason; secrets, signatures, and payloads are never logged.
+
+## Releases
+
+Tagging a version builds the release image for `linux/amd64` and `linux/arm64` and
+pushes it to Docker Hub as `kryptonhq/arc:<version>` and `kryptonhq/arc:latest`:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+`Actions -> Publish image -> Run workflow` publishes an arbitrary tag (for example
+`edge`) from the current branch. Both paths start the pushed image against a throwaway
+Postgres and wait for `/health/ready` before finishing, so a broken image fails the
+run rather than sitting on Docker Hub.
+
+The workflow needs two repository secrets: `DOCKERHUB_USERNAME`, a Docker Hub account
+with push access to `kryptonhq/arc`, and `DOCKERHUB_TOKEN`, an access token for it
+(Docker Hub → Account settings → Personal access tokens), not the account password.
+
+Running a published image:
+
+```bash
+docker run -p 4000:4000 \
+  -e DATABASE_URL=postgres://arc:arc@db:5432/arc \
+  -e SECRET_KEY_BASE=... -e ARC_ENCRYPTION_KEY=... -e PHX_HOST=arc.example.com \
+  -e ARC_OIDC_ISSUER=... -e ARC_OIDC_CLIENT_ID=... -e ARC_OIDC_CLIENT_SECRET=... \
+  -e ARC_ADMIN_EMAILS=you@example.com \
+  kryptonhq/arc:latest
+```
 
 ## Development
 

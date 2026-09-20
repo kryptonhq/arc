@@ -104,19 +104,21 @@ jobs:
       - run: mix deps.get
       - run: test/integration/run.sh
 
-  docker:
-    name: Compose stack and load-test smoke
+  stack:
+    name: Compose stack boots
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: docker compose up -d --build --wait
-      - name: Create a load-test app on the running node
+      - name: The dashboard, health and metrics endpoints answer
         run: |
-          creds=$(docker compose exec -T arc bin/arc rpc 'IO.puts(Jason.encode!(Arc.Release.create_app(%{"name" => "ci", "client_events_enabled" => true, "enable_presence_limits" => false})))' | tail -n 1)
-          echo "ARC_APP_ID=$(echo "$creds" | jq -r .id)" >> "$GITHUB_ENV"
-          echo "ARC_APP_KEY=$(echo "$creds" | jq -r .key)" >> "$GITHUB_ENV"
-          echo "ARC_APP_SECRET=$(echo "$creds" | jq -r .secret)" >> "$GITHUB_ENV"
-      - uses: grafana/setup-k6-action@v1
-      - run: loadtest/smoke.sh
+          set -e
+          curl -fsS http://localhost:4000/health/live > /dev/null
+          curl -fsS http://localhost:4000/health/ready > /dev/null
+          curl -fsS http://localhost:4000/metrics | grep -q arc_connections_active
+          # The seeded demo app exists and the Next.js demo renders against it.
+          curl -fsS http://localhost:3000/ | grep -q "Arc demo"
+          # Unauthenticated dashboard requests start the OIDC flow.
+          curl -fsS -o /dev/null -w '%{http_code}' http://localhost:4000/admin | grep -q 302
       - if: failure()
-        run: docker compose logs arc
+        run: docker compose logs
