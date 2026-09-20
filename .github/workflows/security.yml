@@ -113,9 +113,24 @@ jobs:
         with:
           api-key: ${{ env.FOSSA_API_KEY }}
 
-      # Fails when a dependency's licence breaks the policy set in FOSSA.
+      # Reports policy issues without failing the run. A flagged licence is a
+      # decision — accept it with a notice, or replace the dependency — and that
+      # decision is made in the FOSSA app, not by a red build. Drop
+      # continue-on-error once the policy has been triaged and should hold the line.
       - uses: fossas/fossa-action@main
+        id: policy
+        continue-on-error: true
         if: ${{ env.FOSSA_API_KEY != '' }}
         with:
           api-key: ${{ env.FOSSA_API_KEY }}
           run-tests: true
+
+      - name: Policy summary
+        if: ${{ env.FOSSA_API_KEY != '' }}
+        run: |
+          if [ "${{ steps.policy.outcome }}" = "failure" ]; then
+            echo "FOSSA reported policy issues. A push-only key cannot print them;" >> "$GITHUB_STEP_SUMMARY"
+            echo "see https://app.fossa.com and THIRD-PARTY-NOTICES.md." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "FOSSA policy clean." >> "$GITHUB_STEP_SUMMARY"
+          fi

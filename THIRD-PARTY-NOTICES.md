@@ -46,6 +46,20 @@ The notice is kept in the vendored file's header.
 | [elkjs](https://github.com/kieler/elkjs) | EPL-2.0 | A Mermaid layout dependency that ends up in the client bundle |
 | [lucide-react](https://lucide.dev) | ISC | Icons in the documentation navigation |
 
+### Mozilla Public License 2.0 components
+
+FOSSA's scan flags these, and they are listed here because MPL-2.0 asks for a notice
+and for the source of the covered files to stay available. Arc uses all of them
+unmodified, so no further obligation follows; modifying any of them would require
+publishing the modified files.
+
+| Component | Where it comes from | Source |
+| --- | --- | --- |
+| Next.js | The documentation site's framework; MPL-2.0 code is bundled inside it | <https://github.com/vercel/next.js> |
+| `lightningcss` | CSS processing during the site build | <https://github.com/parcel-bundler/lightningcss> |
+| `@vercel/og` | Open Graph images for documentation pages | <https://github.com/vercel/satori> |
+| `dompurify` | Sanitises the SVG Mermaid produces; dual MPL-2.0 or Apache-2.0 | <https://github.com/cure53/DOMPurify> |
+
 ### IBM Plex
 
 ```
