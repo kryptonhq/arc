@@ -191,7 +191,7 @@ defmodule ArcWeb.AdminTest do
       [app] = Apps.list_apps()
 
       assert html =~ app.secret
-      assert html =~ "shown on this page only"
+      assert html =~ "the only time it is shown"
       assert html =~ "&quot;app_id&quot;: &quot;#{app.id}&quot;"
       assert html =~ "&quot;secret&quot;: &quot;#{app.secret}&quot;"
       assert html =~ "pusher.Pusher(**settings.ARC)"

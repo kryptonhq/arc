@@ -8,7 +8,12 @@ defmodule ArcWeb.Snippets do
   def public_endpoint do
     url = ArcWeb.Endpoint.config(:url) || []
     scheme = Keyword.get(url, :scheme, "http")
-    port = Keyword.get(url, :port) || if(scheme == "https", do: 443, else: 80)
+    # Fall back to the port Arc is actually listening on, which is what a developer
+    # running it locally needs to see.
+    port =
+      Keyword.get(url, :port) || Keyword.get(ArcWeb.Endpoint.config(:http) || [], :port) ||
+        if(scheme == "https", do: 443, else: 80)
+
     %{host: Keyword.get(url, :host, "localhost"), port: port, tls: scheme == "https"}
   end
 

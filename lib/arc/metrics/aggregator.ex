@@ -17,6 +17,9 @@ defmodule Arc.Metrics.Aggregator do
   @topic "arc:stats"
   @interval 1_000
   @stale_after 5_000
+  # Two minutes of per-second snapshots, so a dashboard opened now can draw the
+  # recent past instead of starting from an empty chart.
+  @history 120
 
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
@@ -25,6 +28,9 @@ defmodule Arc.Metrics.Aggregator do
 
   @doc "The latest cluster snapshot."
   def snapshot, do: GenServer.call(__MODULE__, :snapshot)
+
+  @doc "Recent snapshots, oldest first, for charting."
+  def history, do: GenServer.call(__MODULE__, :history)
 
   @impl true
   def init(_opts) do
@@ -38,7 +44,7 @@ defmodule Arc.Metrics.Aggregator do
     )
 
     Process.send_after(self(), :tick, @interval)
-    {:ok, %{nodes: %{}, last_sent: 0, snapshot: empty_snapshot()}}
+    {:ok, %{nodes: %{}, last_sent: 0, snapshot: empty_snapshot(), history: []}}
   end
 
   @doc false
@@ -58,6 +64,7 @@ defmodule Arc.Metrics.Aggregator do
 
   @impl true
   def handle_call(:snapshot, _from, state), do: {:reply, state.snapshot, state}
+  def handle_call(:history, _from, state), do: {:reply, Enum.reverse(state.history), state}
 
   @impl true
   def handle_info(:tick, state) do
@@ -79,11 +86,15 @@ defmodule Arc.Metrics.Aggregator do
 
     snapshot = build_snapshot(nodes)
 
-    if from == node() do
-      Phoenix.PubSub.local_broadcast(Arc.PubSub, @topic, {:arc_stats, snapshot})
-    end
+    history =
+      if from == node() do
+        Phoenix.PubSub.local_broadcast(Arc.PubSub, @topic, {:arc_stats, snapshot})
+        [sample(snapshot) | state.history] |> Enum.take(@history)
+      else
+        state.history
+      end
 
-    {:noreply, %{state | nodes: nodes, snapshot: snapshot}}
+    {:noreply, %{state | nodes: nodes, snapshot: snapshot, history: history}}
   end
 
   defp collect(messages_per_second) do
@@ -145,6 +156,14 @@ defmodule Arc.Metrics.Aggregator do
           %{name: name, connections: s.connections, memory: s.memory, run_queue: s.run_queue}
         end)
         |> Enum.sort_by(& &1.name)
+    }
+  end
+
+  defp sample(snapshot) do
+    %{
+      at: System.system_time(:second),
+      connections: snapshot.connections,
+      messages_per_second: snapshot.messages_per_second
     }
   end
 
