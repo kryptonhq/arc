@@ -9,7 +9,7 @@ Arc is published as a multi-architecture image for `linux/amd64` and `linux/arm6
 docker pull kryptonhq/arc:latest
 ```
 
-Tags are `latest` and a version per release (`0.1.0`, …). Pin the version in production.
+Tags are `latest` and a version per release (`0.2.0`, …). Pin the version in production.
 Each tag is started against a throwaway Postgres in CI before it is published, so a tag
 that exists has booted at least once.
 
@@ -20,7 +20,7 @@ docker run -p 4000:4000 \
   -e PHX_HOST=arc.example.com \
   -e ARC_OIDC_ISSUER=... -e ARC_OIDC_CLIENT_ID=... -e ARC_OIDC_CLIENT_SECRET=... \
   -e ARC_ADMIN_EMAILS=you@example.com \
-  kryptonhq/arc:0.1.0
+  kryptonhq/arc:0.2.0
 ```
 
 Migrations run at startup, so a fresh Postgres plus the image is a working install. See

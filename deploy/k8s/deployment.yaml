@@ -29,7 +29,7 @@ spec:
               app: arc
       containers:
         - name: arc
-          image: kryptonhq/arc:0.1.0
+          image: kryptonhq/arc:0.2.0
           ports:
             - name: http
               containerPort: 4000
