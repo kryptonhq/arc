@@ -353,7 +353,7 @@ Tagging a version builds the release image for `linux/amd64` and `linux/arm64` a
 pushes it to Docker Hub as `kryptonhq/arc:<version>` and `kryptonhq/arc:latest`:
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+git tag v0.2.0 && git push origin v0.2.0
 ```
 
 `Actions -> Publish image -> Run workflow` publishes an arbitrary tag (for example

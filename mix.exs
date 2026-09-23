@@ -4,7 +4,7 @@ defmodule Arc.MixProject do
   def project do
     [
       app: :arc,
-      version: "0.1.0",
+      version: "0.2.0",
       description: "Self-hosted realtime messaging server speaking the Channels protocol v7",
       source_url: "https://github.com/kryptonhq/arc",
       package: [
