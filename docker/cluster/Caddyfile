@@ -1,0 +1,20 @@
+# Round-robins every request across the three Arc nodes, forwards WebSocket
+# upgrades (Caddy does so by default), and only routes to nodes that pass the
+# readiness check, so a draining node stops receiving traffic before its clients
+# are closed.
+:4100 {
+	reverse_proxy arc1:4000 arc2:4000 arc3:4000 {
+		lb_policy round_robin
+		health_uri /health/ready
+		health_interval 1s
+		health_timeout 2s
+		# Fail fast to another node when one is mid-restart.
+		fail_duration 5s
+		max_fails 1
+		# Clients hold the connection open past the 120 s activity timeout.
+		transport http {
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}

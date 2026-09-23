@@ -238,6 +238,48 @@ jobs:
       - if: env.RUN == 'true'
         run: npm run build
 
+  compose-cluster:
+    needs: changes
+    name: Cluster behaviour (three containers behind a balancer)
+    runs-on: ubuntu-latest
+    env:
+      RUN: ${{ needs.changes.outputs.server == 'true' || needs.changes.outputs.packaging == 'true' }}
+    services:
+      # Only so the test application boots; the suite itself talks to the stack.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: arc
+          POSTGRES_PASSWORD: arc
+        ports: ["5442:5432"]
+        options: >-
+          --health-cmd "pg_isready -U arc" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - if: env.RUN == 'true'
+        uses: actions/checkout@v4
+      - if: env.RUN == 'true'
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+      - if: env.RUN == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: mix-${{ runner.os }}-${{ env.OTP_VERSION }}-${{ env.ELIXIR_VERSION }}-${{ hashFiles('mix.lock') }}
+      - if: env.RUN == 'true'
+        run: mix deps.get
+      - if: env.RUN == 'true'
+        run: docker compose -f docker-compose.cluster.yml up -d --build --wait
+      # The suite drives the stack over its published ports and injects failures with
+      # the Docker CLI; it needs no test database.
+      - if: env.RUN == 'true'
+        run: mix test --only compose test/compose
+      - if: failure()
+        run: docker compose -f docker-compose.cluster.yml logs --tail 200
+
   stack:
     needs: changes
     name: Compose stack boots

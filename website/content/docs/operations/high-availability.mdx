@@ -28,7 +28,13 @@ clients ──► load balancer (TLS, WebSocket upgrade, /health/ready) ──�
   seconds, and needs no sticky sessions: any node can serve any client, and a
   publish on one node reaches subscribers on all of them.
 - **Managed Postgres** with automated backups. The data plane never needs it; the
-  dashboard, webhook persistence, and sign-in do.
+  dashboard, webhook persistence, and sign-in do. It must have TCP keepalives on
+  (`tcp_keepalives_idle`, `_interval`, `_count`), and `max_connections` above
+  `POOL_SIZE` × nodes with headroom. A node cut off by a partition never closes its
+  connections; without keepalives Postgres keeps them for hours, and the node's
+  reconnect fails with "too many clients", leaving it `503 database unreachable`
+  until the connections time out. Managed offerings usually have keepalives on;
+  the reference compose stack sets them explicitly.
 - **An identity provider** for the dashboard, or the password mode if it exists in
   your version. If it is unreachable only sign-in is affected.
 
@@ -94,6 +100,7 @@ deploy, `4102` is slow clients, `4100` is a node over capacity or still warming,
 | --- | --- | --- | --- | --- |
 | A node dies | Its clients reconnect with backoff and land elsewhere | Everything, on the other nodes; presence removes the dead node's members within ~5 s | Nothing urgent. Replace it; check why | The node is back in `Node.list()` and ready |
 | Postgres unreachable | Nothing, unless they open the dashboard | Connections, subscribe, publish, presence, channel auth | Fix Postgres. Nodes report `503 database unreachable`; keep at least one in rotation by relaxing the balancer check if all of them do | `/health/ready` is 200 on every node |
+| One node stuck at `503 database unreachable` after a network blip | Nothing; it takes no new traffic | Its existing connections | Check `pg_stat_activity` for leaked sessions from that node's old address and Postgres keepalive settings; restart the node if you cannot wait for them to time out | `/health/ready` is 200 again |
 | Identity provider unreachable | Nothing; admins cannot sign in | Everything but the dashboard | Fix the provider. Existing dashboard sessions keep working for 12 h | Sign-in page loads |
 | Balancer health flapping | Reconnects | Everything | Check the balancer's timeout is above the probe's 2 s database check and that it targets `/health/ready`, not `/` | No `503` in the balancer log |
 | A client hammering auth | That client is closed with `4010` | Everything | Find the app and the client in logs (`client_ip`, `app_id`); fix or block upstream | `arc_auth_failures_total` flat |
