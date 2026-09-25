@@ -34,9 +34,11 @@ export const protocolErrors = new Counter('arc_protocol_errors');
 export const closed = new Counter('arc_ws_closed');
 export const connectErrors = new Counter('arc_connect_errors');
 
-// Each distinct reason is printed once, so the console says why without flooding.
+// Each distinct reason is printed once by the first VU, so the console says why
+// without every client repeating it (VUs do not share memory).
 const seen = new Set();
 function explain(kind, detail) {
+  if (__VU !== 1) return;
   const key = `${kind}:${detail}`;
   if (seen.has(key)) return;
   seen.add(key);
