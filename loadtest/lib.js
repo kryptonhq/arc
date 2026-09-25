@@ -26,6 +26,24 @@ export const received = new Counter('arc_events_received');
 export const published = new Counter('arc_events_published');
 export const connectFailed = new Rate('arc_connect_failed');
 export const protocolErrors = new Counter('arc_protocol_errors');
+// Why connections ended: close codes from the server (4100 over capacity, 4101 shutting
+// down, 4102 slow consumer, 4201 pong timeout, 1006 abnormal) and connect errors by
+// message. A failed handshake behind a proxy usually shows up here as 1006 plus an
+// error mentioning the HTTP status; a 429 means the per-address limit is treating every
+// client as one address (set ARC_TRUSTED_PROXIES on the server).
+export const closed = new Counter('arc_ws_closed');
+export const connectErrors = new Counter('arc_connect_errors');
+
+// Each distinct reason is printed once by the first VU, so the console says why
+// without every client repeating it (VUs do not share memory).
+const seen = new Set();
+function explain(kind, detail) {
+  if (__VU !== 1) return;
+  const key = `${kind}:${detail}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  console.warn(`arc: first ${kind}: ${detail}`);
+}
 
 export function requireCredentials() {
   if (!cfg.appId || !cfg.key || !cfg.secret) {
@@ -97,11 +115,18 @@ export function connect(handlers = {}) {
     }
     if (handlers.onEvent) handlers.onEvent(frame, ws);
   };
-  ws.onerror = () => {
+  ws.onerror = (e) => {
     if (!ready) connectFailed.add(true);
-    if (handlers.onError) handlers.onError();
+    const reason = String((e && (e.error || e.message)) || 'unknown').slice(0, 120);
+    connectErrors.add(1, { during: ready ? 'session' : 'handshake' });
+    explain(ready ? 'error during session' : 'connect error', reason);
+    if (handlers.onError) handlers.onError(e);
   };
   ws.onclose = (e) => {
+    closed.add(1, { during: ready ? 'session' : 'handshake' });
+    if (!ready || (e && e.code && e.code !== 1000 && e.code !== 1005)) {
+      explain(ready ? 'close during session' : 'close during handshake', `code ${e && e.code}`);
+    }
     if (handlers.onClose) handlers.onClose(e);
   };
   return ws;

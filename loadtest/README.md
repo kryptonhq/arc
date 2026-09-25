@@ -27,6 +27,72 @@ k6 run loadtest/fanout_wide.js
 compose stack. It checks the scripts and the server end to end, not the performance
 bars.
 
+## Against a deployed Arc
+
+`event.js` is the scenario to rehearse a real audience: N clients on one channel, a
+backend publishing notifications, end-to-end latency measured at the client. It runs
+unchanged against staging or production through TLS and a tunnel or balancer.
+
+1. In the dashboard, create an app for load testing and copy its id, key and secret.
+   Do not use the app real clients connect with: the test's connections and publishes
+   count against that app's limits.
+2. Put the endpoints and credentials in an env file:
+
+   ```bash
+   cp loadtest/.env.example loadtest/.env   # edit it, then:
+   set -a; source loadtest/.env; set +a
+   ```
+
+3. Run the rehearsal. 300 clients, two notifications a second for five minutes:
+
+   ```bash
+   k6 run loadtest/event.js
+   ```
+
+   Knobs, all optional:
+
+   ```bash
+   CONNECTIONS=300 RATE=2 RAMP_SECONDS=60 DURATION_SECONDS=300 \
+   CHANNEL=event-notifications PRIVATE=0 PAYLOAD_BYTES=512 P99_MS=1000 \
+   k6 run loadtest/event.js
+   ```
+
+   `PRIVATE=1` subscribes to `private-<CHANNEL>` with a signed auth token, the way
+   an app with authenticated channels would. `P99_MS` is the latency bar; 1000 ms is
+   generous for a run over the public internet, 200 ms is the in-datacentre bar.
+
+4. Read the result. The summary prints PASS or FAIL per threshold and writes
+   `loadtest/results/event.json` with the numbers. The ones that matter:
+
+   | Metric | Means |
+   | --- | --- |
+   | `arc_receive_latency_ms` p99 | Backend POST to client receive, end to end |
+   | `arc_connect_failed` | Clients that never completed the handshake |
+   | `http_req_failed{name:publish}` | Publishes the API refused |
+   | `arc_protocol_errors` | Frames the server rejected; must be zero |
+   | `received` vs `expected_receives_at_full_audience` | Fan-out completeness. Lower during the ramp is expected; lower at steady state is a dropped connection |
+
+**One load generator is one address.** Arc limits connection attempts per client
+address (`ARC_CONNECT_RATE_PER_MINUTE`, 120 by default), and every client k6 opens
+comes from the machine it runs on. A 300-client ramp over 60 s is 300 attempts a minute
+from one address, so most are refused with 429 and the run shows thousands of short
+iterations instead of one per client. Before a run from a single machine, either raise
+the limit on the target (`ARC_CONNECT_RATE_PER_MINUTE=3000`) or ramp slower than the
+limit (`RAMP_SECONDS=200` for 300 clients). The same applies to real audiences behind one
+NAT address, such as a venue or an office; see the high-availability docs.
+
+If clients fail to connect, the console prints the first close code and error reason
+seen, and the summary splits closes and errors into handshake versus session. Confirm
+the cause with `arc_rate_limit_hits_total{kind="connect"}` on the server's `/metrics`.
+A second cause behind a proxy or tunnel is `ARC_TRUSTED_PROXIES` not covering the
+proxy, which makes every client look like the proxy's address; a connection log line
+then shows `client_ip` as a private address. On the server, watch
+`arc_connections_active` climb to `CONNECTIONS` and stay there. Clocks matter: latency compares the client's clock with `sent_at` from the
+publisher, and both run in this one k6 process, so it is exact.
+
+One machine opens up to ~28k connections to one address; 300 is nowhere near that.
+For thousands, see "Generating 100k connections" below.
+
 ## Scenarios
 
 | Script | Shape | Passing bar on 4 vCPU / 8 GB | Scale knobs |
@@ -39,6 +105,7 @@ bars.
 | `api_throughput.js` | 5k publishes/s | p99 < 50 ms, zero 5xx | `RATE`, `DURATION`, `CHANNELS` |
 | `reconnect_storm.js` | 50k connections drop at once and reconnect | Every client back within 60 s | `CONNECTIONS`, `RAMP_SECONDS` |
 | `soak.js` | 20k connections, moderate traffic, 12 hours | Flat server memory | `CONNECTIONS`, `HOURS`, `RATE`, `RECYCLE_MINUTES` |
+| `event.js` | An audience: N clients on one channel, a backend publishing | p99 receive < `P99_MS` (1000 default), zero connect failures, zero protocol errors | `CONNECTIONS`, `RATE`, `RAMP_SECONDS`, `DURATION_SECONDS`, `CHANNEL`, `PRIVATE`, `PAYLOAD_BYTES`, `P99_MS` |
 
 Receive latency is measured end to end: publishers embed `sent_at` in the event and
 subscribers compare it with their own clock, so run publishers and subscribers from
