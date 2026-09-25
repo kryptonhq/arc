@@ -16,6 +16,7 @@
 // Credentials and endpoints come from the shared lib: ARC_WS_URL, ARC_API_URL,
 // ARC_APP_ID, ARC_APP_KEY, ARC_APP_SECRET. See loadtest/README.md, "Against a
 // deployed Arc", for a copy-paste run.
+import exec from 'k6/execution';
 import {
   connect,
   subscribe,
@@ -90,8 +91,10 @@ export function audience() {
     onReady(ws, socketId) {
       subscribe(ws, channelName, PRIVATE ? { auth: channelAuth(socketId, channelName) } : {});
       keepalive(ws);
-      // Close before the scenario ends so k6 does not have to interrupt the iteration.
-      holdFor(ws, (RAMP + DURATION + 20) * 1000);
+      // Every client closes at the same moment, just after the last publish and before
+      // the scenario ends, so k6 never has to interrupt an iteration.
+      const closeAt = exec.scenario.startTime + (RAMP + DURATION + 25) * 1000;
+      holdFor(ws, Math.max(1000, closeAt - Date.now()));
     },
   });
 }
