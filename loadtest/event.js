@@ -65,6 +65,10 @@ export const options = {
     },
   },
   thresholds: {
+    // Declared so the handshake-vs-session split survives into the summary. The reason
+    // for each is printed once on the console the first time it is seen.
+    'arc_ws_closed{during:handshake}': ['count>=0'],
+    'arc_connect_errors{during:handshake}': ['count>=0'],
     // End to end: backend POST to client receive, measured by the client's clock
     // against sent_at in the payload. Run k6 on a machine with NTP.
     arc_receive_latency_ms: [`p(99)<${P99_MS}`],
@@ -99,7 +103,17 @@ export function backend() {
 export function handleSummary(data) {
   const subs = data.metrics.arc_events_received ? data.metrics.arc_events_received.values.count : 0;
   const pubs = data.metrics.arc_events_published ? data.metrics.arc_events_published.values.count : 0;
-  return summary('event', data, {
+  // Per-tag breakdowns of why connections ended, for the summary and the console.
+  const breakdown = (prefix) =>
+    Object.keys(data.metrics)
+      .filter((k) => k.startsWith(prefix + '{'))
+      .reduce((acc, k) => Object.assign(acc, { [k.slice(prefix.length)]: data.metrics[k].values.count }), {});
+  const closes = breakdown('arc_ws_closed');
+  const errors = breakdown('arc_connect_errors');
+  const lines = [];
+  if (Object.keys(closes).length) lines.push('connections closed: ' + JSON.stringify(closes));
+  if (Object.keys(errors).length) lines.push('connect errors: ' + JSON.stringify(errors));
+  const out = summary('event', data, {
     connections: CONNECTIONS,
     rate: RATE,
     channel: channelName,
@@ -108,5 +122,9 @@ export function handleSummary(data) {
     received: subs,
     // Every publish should reach every subscriber that was connected at the time.
     expected_receives_at_full_audience: pubs * CONNECTIONS,
+    closes,
+    connect_errors: errors,
   });
+  if (lines.length) out.stdout += lines.join('\n') + '\n';
+  return out;
 }

@@ -72,10 +72,14 @@ unchanged against staging or production through TLS and a tunnel or balancer.
    | `arc_protocol_errors` | Frames the server rejected; must be zero |
    | `received` vs `expected_receives_at_full_audience` | Fan-out completeness. Lower during the ramp is expected; lower at steady state is a dropped connection |
 
-On the server, watch `arc_connections_active` climb to `CONNECTIONS` and
-`arc_rate_limit_hits_total`. A burst of `kind="connect"` hits means every client is
-being seen as one address: set `ARC_TRUSTED_PROXIES` on the server to the proxy in
-front of it. Clocks matter: latency compares the client's clock with `sent_at` from the
+If clients fail to connect, the console prints the first close code and error reason
+seen, and the summary splits closes and errors into handshake versus session. The common
+one behind a proxy or tunnel: many `close during handshake` and thousands of iterations
+instead of one per client. That is the per-address connection limit treating every
+client as one address. Confirm with `arc_rate_limit_hits_total{kind="connect"}` on the
+server's `/metrics`, and fix it by setting `ARC_TRUSTED_PROXIES` on the server to the
+proxy's network. On the server, also watch `arc_connections_active` climb to
+`CONNECTIONS` and stay there. Clocks matter: latency compares the client's clock with `sent_at` from the
 publisher, and both run in this one k6 process, so it is exact.
 
 One machine opens up to ~28k connections to one address; 300 is nowhere near that.
