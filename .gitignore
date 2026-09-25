@@ -46,3 +46,4 @@ npm-debug.log
 # Coverage output
 /cover/
 tmp/
+loadtest/.env
