@@ -72,14 +72,22 @@ unchanged against staging or production through TLS and a tunnel or balancer.
    | `arc_protocol_errors` | Frames the server rejected; must be zero |
    | `received` vs `expected_receives_at_full_audience` | Fan-out completeness. Lower during the ramp is expected; lower at steady state is a dropped connection |
 
+**One load generator is one address.** Arc limits connection attempts per client
+address (`ARC_CONNECT_RATE_PER_MINUTE`, 120 by default), and every client k6 opens
+comes from the machine it runs on. A 300-client ramp over 60 s is 300 attempts a minute
+from one address, so most are refused with 429 and the run shows thousands of short
+iterations instead of one per client. Before a run from a single machine, either raise
+the limit on the target (`ARC_CONNECT_RATE_PER_MINUTE=3000`) or ramp slower than the
+limit (`RAMP_SECONDS=200` for 300 clients). The same applies to real audiences behind one
+NAT address, such as a venue or an office; see the high-availability docs.
+
 If clients fail to connect, the console prints the first close code and error reason
-seen, and the summary splits closes and errors into handshake versus session. The common
-one behind a proxy or tunnel: many `close during handshake` and thousands of iterations
-instead of one per client. That is the per-address connection limit treating every
-client as one address. Confirm with `arc_rate_limit_hits_total{kind="connect"}` on the
-server's `/metrics`, and fix it by setting `ARC_TRUSTED_PROXIES` on the server to the
-proxy's network. On the server, also watch `arc_connections_active` climb to
-`CONNECTIONS` and stay there. Clocks matter: latency compares the client's clock with `sent_at` from the
+seen, and the summary splits closes and errors into handshake versus session. Confirm
+the cause with `arc_rate_limit_hits_total{kind="connect"}` on the server's `/metrics`.
+A second cause behind a proxy or tunnel is `ARC_TRUSTED_PROXIES` not covering the
+proxy, which makes every client look like the proxy's address; a connection log line
+then shows `client_ip` as a private address. On the server, watch
+`arc_connections_active` climb to `CONNECTIONS` and stay there. Clocks matter: latency compares the client's clock with `sent_at` from the
 publisher, and both run in this one k6 process, so it is exact.
 
 One machine opens up to ~28k connections to one address; 300 is nowhere near that.

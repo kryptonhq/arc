@@ -46,6 +46,7 @@ Reference manifests for exactly this shape are in
 | Variable | Set it to | Why |
 | --- | --- | --- |
 | `ARC_TRUSTED_PROXIES` | The load balancer's CIDR | Otherwise every client looks like the balancer and the per-address limit hits everyone at once |
+| `ARC_CONNECT_RATE_PER_MINUTE` | Well above the largest crowd behind one address, e.g. `3000` | The default of 120 stops a reconnect loop, but a venue, office or campus puts hundreds of people behind one NAT address, and a load generator is one address too. A reconnect storm after a restart must fit under it |
 | `ARC_DRAIN_SECONDS` | Longer than the balancer's health-check interval × its failure threshold | So it stops routing before clients are closed |
 | Grace period | `ARC_DRAIN_SECONDS` + 20 s | `terminationGracePeriodSeconds` or `stop_grace_period`; shorter and the VM is killed mid-drain |
 | `ARC_MAX_CONNECTIONS_PER_NODE` | Well above the expected peak ÷ nodes | A ceiling for the day something loops, not a target |
